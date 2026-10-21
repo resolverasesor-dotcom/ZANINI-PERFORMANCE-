@@ -92,7 +92,7 @@ export class Game {
     container.appendChild(this.ui);
     this.screen = el('div', 'screen');
     this.ui.appendChild(this.screen);
-    this.touch = new TouchControls(this.ui, this.input);
+    this.touch = new TouchControls(this.ui, this.input, () => this.settings);
     this.touch.show(false);
     this.audio.setVolumes(this.settings.volume, this.settings.sfx, this.settings.musicVolume, this.settings.music);
     this.showroom = new Showroom(this.renderer, this.settings.quality);
@@ -113,6 +113,7 @@ export class Game {
       uiRoot: this.ui,
       touch: this.touch,
       touchEnabled: () => this.touchEnabled(),
+      portrait: this.portraitPref,
       draw: (scene, camera) => this.draw(scene, camera),
       post: () => this.post,
     };
@@ -146,6 +147,8 @@ export class Game {
   }
 
   private post: PostFX | null = null;
+  /** El jugador eligió seguir en vertical (no volver a insistir en esta visita). */
+  private portraitPref = { ok: false };
   private postQuality: string = '';
 
   /** Dibuja una escena (con postproducción si está activa). */
@@ -480,8 +483,20 @@ export class Game {
   }
 
   // ---------------- sesiones ----------------
+  /** En móvil: pantalla completa y bloqueo en horizontal (si el navegador lo permite). */
+  private tryLandscape(): void {
+    if (!this.touchEnabled()) return;
+    const so = screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+    const lock = () => so?.lock?.('landscape').catch(() => undefined);
+    const de = document.documentElement;
+    if (!document.fullscreenElement && de.requestFullscreen) {
+      de.requestFullscreen({ navigationUI: 'hide' }).then(lock, () => undefined);
+    } else lock();
+  }
+
   private runSession(setup: SessionSetup, onOutcome: (o: SessionOutcome) => void): void {
     this.audio.unlock();
+    this.tryLandscape();
     this.screen.innerHTML = '';
     this.screen.className = 'screen hidden';
     const loading = el('div', 'loading', `${logoHTML('small')}<div class="loading-txt">Cargando ${esc(getCircuit(setup.trackId).name)}…</div>`);
@@ -1020,6 +1035,7 @@ export class Game {
         <button class="btn sm" data-act="resetkeys">Restablecer teclas</button>
         <div class="hint"><b>Mando:</b> stick/cruceta girar · RT/A acelerar · LT/X frenar · RB/LB/B derrapar · Y reaparecer · Select cámara · Start pausa.</div>
         ${this.choice('Controles táctiles', 'touch', [['auto', 'Auto'], ['on', 'Siempre'], ['off', 'Nunca']], s.touch)}
+        ${this.choice('Dirección táctil', 'touchsteer', [['pad', 'Barra deslizante'], ['botones', 'Flechas']], s.touchSteer)}
         ${this.choice('Aceleración automática (táctil)', 'autoaccel', [['on', 'Sí'], ['off', 'No']], s.autoAccel ? 'on' : 'off')}
         ${this.choice('Vibración del mando', 'vibration', [['on', 'Sí'], ['off', 'No']], s.vibration ? 'on' : 'off')}`;
     } else {
@@ -1090,6 +1106,11 @@ export class Game {
         },
         touch: (b) => {
           s.touch = b.dataset.val as Settings['touch'];
+          save();
+          re();
+        },
+        touchsteer: (b) => {
+          s.touchSteer = b.dataset.val as Settings['touchSteer'];
           save();
           re();
         },

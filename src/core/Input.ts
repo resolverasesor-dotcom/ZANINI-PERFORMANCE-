@@ -26,6 +26,13 @@ export class Input {
   /** Si se asigna, la siguiente tecla pulsada se entrega aquí (reasignar controles). */
   captureNext: ((code: string) => void) | null = null;
   lastDevice: 'keyboard' | 'gamepad' | 'touch' = 'keyboard';
+  /** Los controles táctiles están en pantalla (los activa TouchControls). */
+  touchVisible = false;
+
+  /** Aceleración automática activa (ajuste + controles táctiles visibles). */
+  get autoAccelActive(): boolean {
+    return this.settings.autoAccel && this.touchVisible;
+  }
   readonly state: ControlState = {
     steer: 0,
     throttle: 0,
@@ -149,7 +156,7 @@ export class Input {
       if (t.brake) brake = 1;
       drift = drift || t.drift;
     }
-    if (this.settings.autoAccel && this.lastDevice === 'touch' && !t.brake) throttle = 1;
+    if (this.autoAccelActive && !t.brake) throttle = 1;
     respawn = respawn || this.touchEdges.respawn;
     pause = pause || this.touchEdges.pause;
     this.touchEdges.respawn = false;

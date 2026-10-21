@@ -42,6 +42,10 @@ export interface Settings {
   keys: Record<Action, string[]>;
   touch: 'auto' | 'on' | 'off';
   autoAccel: boolean;
+  /** Dirección táctil: barra deslizante analógica o flechas. */
+  touchSteer: 'pad' | 'botones';
+  /** Versión de los ajustes táctiles (para migrar valores por defecto). */
+  touchV?: number;
   speedLines: boolean;
   ghost: boolean;
   vibration: boolean;
@@ -74,7 +78,9 @@ export function defaultSettings(): Settings {
     camera: 'trasera',
     keys: structuredClone(DEFAULT_KEYS),
     touch: 'auto',
-    autoAccel: false,
+    autoAccel: mobile,
+    touchSteer: 'pad',
+    touchV: 2,
     speedLines: true,
     ghost: true,
     vibration: true,
@@ -84,6 +90,12 @@ export function defaultSettings(): Settings {
 export function loadSettings(): Settings {
   const s = { ...defaultSettings(), ...load<Partial<Settings>>('settings', {}) };
   s.keys = { ...DEFAULT_KEYS, ...s.keys };
+  // Migración: nuevos controles táctiles (dirección analógica y aceleración automática en móvil)
+  if ((s.touchV ?? 1) < 2) {
+    s.touchV = 2;
+    s.touchSteer = 'pad';
+    if (isMobile()) s.autoAccel = true;
+  }
   return s;
 }
 

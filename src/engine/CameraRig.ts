@@ -60,6 +60,12 @@ export class CameraRig {
         lookAhead = 4.5;
         lookH = 0.9;
     }
+    // En vertical (móvil) alejamos y subimos la cámara para ver más pista
+    const narrow = Math.max(0, 1 - cam.aspect);
+    if (this.mode !== 'capo') {
+      dist *= 1 + narrow * 0.55;
+      height += narrow * 1.6;
+    }
     const tx = x - fx * dist;
     const tz = z - fz * dist;
     const ty = y + height - slope * dist * 0.5;
@@ -82,7 +88,8 @@ export class CameraRig {
     }
     cam.lookAt(this.look);
     const baseFov = this.mode === 'capo' ? 74 : 66;
-    const targetFov = baseFov + clamp(speedRatio, 0, 1.3) * 16 + (boost ? 8 : 0);
+    const narrowF = Math.max(0, 1 - cam.aspect);
+    const targetFov = baseFov + narrowF * 26 + clamp(speedRatio, 0, 1.3) * 16 + (boost ? 8 : 0);
     this.fov = damp(this.fov, targetFov, 4, dt);
     cam.fov = this.fov;
     cam.updateProjectionMatrix();

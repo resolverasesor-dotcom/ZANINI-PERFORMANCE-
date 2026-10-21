@@ -89,8 +89,11 @@ mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapand
 
 Las teclas se pueden **reasignar** en *Ajustes → Controles*. Los menús se manejan también con
 flechas o con el mando (A aceptar, B volver). En móvil los controles táctiles aparecen solos
-(se pueden forzar o quitar en Ajustes) y hay opción de **aceleración automática**.
-Mejor jugar en horizontal.
+(se pueden forzar o quitar en Ajustes): **barra de dirección analógica** a la izquierda (pon el dedo y
+deslízalo: cuanto más lejos del centro, más giras) y DERRAPE/FRENO a la derecha. La **aceleración
+automática** viene activada en móvil (se puede quitar en Ajustes → Controles, y también volver a las flechas).
+Se juega mejor en horizontal: el juego intenta girar la pantalla y, si no puede, te lo sugiere
+(con opción de seguir en vertical).
 
 ## Ajustes
 

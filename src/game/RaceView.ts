@@ -31,6 +31,7 @@ import type { TouchControls } from '../ui/TouchControls';
 export interface GameCtx {
   renderer: THREE.WebGLRenderer;
   draw: (scene: THREE.Scene, camera: THREE.Camera) => void;
+  portrait: { ok: boolean };
   post: () => PostFX | null;
   input: Input;
   audio: AudioEngine;
@@ -289,6 +290,7 @@ export class RaceView {
     }
     ctx.audio.stopMusic();
     this.ctx.touch?.show(ctx.touchEnabled());
+    if (ctx.touchEnabled() && window.innerHeight > window.innerWidth && !ctx.portrait.ok) this.openRotateHint();
     this.onResize();
   }
 
@@ -391,6 +393,14 @@ export class RaceView {
       this.render();
       return;
     }
+    if (this.rotateEl) {
+      const landscape = window.innerWidth > window.innerHeight;
+      if (landscape || this.ctx.portrait.ok) this.closeRotateHint();
+      else {
+        this.render();
+        return;
+      }
+    }
     if (this.replayT >= 0) {
       if (ctrl.pause || ctrl.nav.confirm || ctrl.nav.back) this.endReplay();
       else this.runReplay(dt);
@@ -411,7 +421,8 @@ export class RaceView {
 
     const pi = this.playerInput;
     pi.steer = ctrl.steer;
-    pi.throttle = ctrl.throttle;
+    // Con aceleración automática no se acelera en parrilla (evita la salida anticipada)
+    pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
     pi.brake = ctrl.brake;
     pi.drift = ctrl.drift;
 
@@ -604,6 +615,29 @@ export class RaceView {
     this.ctx.audio.updateLoops(k.speed > 3 ? skid : 0, off * clamp(k.speed / 12, 0, 1), ratio * ratio);
   }
 
+  // ---------- orientación ----------
+  private rotateEl: HTMLDivElement | null = null;
+
+  private openRotateHint(): void {
+    const r = el('div', 'rotate-hint');
+    r.innerHTML = `<div class="rh-phone"><i></i></div>
+      <div class="rh-title">Gira el móvil</div>
+      <div class="rh-sub">Se juega mucho mejor en horizontal</div>
+      <button class="btn" data-portrait>Jugar en vertical</button>`;
+    r.querySelector('[data-portrait]')!.addEventListener('click', () => {
+      this.ctx.portrait.ok = true;
+      this.closeRotateHint();
+    });
+    this.ctx.uiRoot.appendChild(r);
+    this.rotateEl = r;
+  }
+
+  private closeRotateHint(): void {
+    this.rotateEl?.remove();
+    this.rotateEl = null;
+    this.onResize();
+  }
+
   // ---------- repetición ----------
   private startReplay(): void {
     if (!this.replay) return;
@@ -647,6 +681,7 @@ export class RaceView {
     if (this.replayT < 0) return;
     this.replayT = -1;
     this.replayEl?.remove();
+    this.rotateEl?.remove();
     this.replayEl = null;
     this.hud.show(true);
     this.ctx.touch?.show(this.ctx.touchEnabled());
