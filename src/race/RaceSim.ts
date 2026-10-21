@@ -89,6 +89,11 @@ export class Competitor {
   private excN = 0;
   private excSide = 0;
   checkpoint = -1;
+  /** Puesto de salida y puesto al completar cada vuelta (gráfico de posiciones). */
+  grid = 0;
+  posHistory: number[] = [];
+  overtakes = 0;
+  lastPos = 0;
   /** Para clasificación simulada de la IA. */
   simLaps: { at: number; time: number }[] = [];
 
@@ -156,6 +161,7 @@ export class RaceSim {
   timeUp = false;
   private aiWorld: AIWorld;
   private gridInput: KartInput = emptyInput();
+  private overtakeClock = 0;
 
   constructor(cfg: SimConfig) {
     this.cfg = cfg;
@@ -173,6 +179,8 @@ export class RaceSim {
       c.lastS = c.kart.proj.s;
       c.gridX = c.kart.x;
       c.gridZ = c.kart.z;
+      c.grid = i + 1;
+      c.posHistory = [i + 1];
       if (!e.isPlayer) c.ai = new AIDriver(c.kart, e.driver, cfg.difficulty, (cfg.seed ?? 1) * 31 + i * 7);
     });
     this.player = this.comps.find((c) => c.e.isPlayer) ?? null;
@@ -373,6 +381,7 @@ export class RaceSim {
         this.events.push({ type: 'lap', id: c.id, time: lapTime, best, valid, lap: c.lapsDone + 1 });
       }
       c.lapsDone++;
+      if (this.isRace && c.posHistory.length <= this.cfg.laps) c.posHistory.push(c.position);
       c.lapStart = this.time;
       c.sector = 0;
       c.sectorStart = this.time;
@@ -451,7 +460,14 @@ export class RaceSim {
     });
     const L = this.track.length;
     const lead = order[0];
+    // Adelantamientos: puestos ganados entre muestras cada 2 s (filtra los cruces de ida y vuelta)
+    const sample = this.phase === 'racing' && this.time - this.overtakeClock >= 2;
+    if (sample) this.overtakeClock = this.time;
     order.forEach((c, i) => {
+      if (sample) {
+        if (c.lastPos > 0 && i + 1 < c.lastPos && !c.finished && this.time > 3) c.overtakes += c.lastPos - (i + 1);
+        c.lastPos = i + 1;
+      }
       c.position = i + 1;
       c.lapsBehind = Math.max(0, Math.floor((lead.totalDist - c.totalDist) / L));
       c.interval = i === 0 ? 0 : Math.max(0, c.gap - order[i - 1].gap);
@@ -555,6 +571,9 @@ export class RaceSim {
       bestLap: r.c.bestLap,
       penalty: r.c.penalty,
       fastestLap: r.c === fastest,
+      grid: r.c.grid,
+      posHistory: [...r.c.posHistory.slice(0, laps), i + 1],
+      overtakes: r.c.overtakes,
     }));
   }
 
@@ -575,6 +594,10 @@ export interface RaceResultRow {
   bestLap: number | null;
   penalty: number;
   fastestLap: boolean;
+  grid: number;
+  /** Puesto en la salida, al final de cada vuelta y en meta. */
+  posHistory: number[];
+  overtakes: number;
 }
 
 /** Calcula el tiempo de vuelta de referencia de la IA (simulación sin render). */

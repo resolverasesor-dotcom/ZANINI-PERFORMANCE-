@@ -21,6 +21,9 @@ import { el } from '../ui/dom';
 import { Hud, type TowerRow } from '../ui/Hud';
 import { Minimap } from '../ui/Minimap';
 import { Tutorial } from '../ui/Tutorial';
+import { MEDAL_ICON, medalFor, medalTimes, type Medal } from '../race/medals';
+import { ReplayBuffer, TVDirector } from './Replay';
+import { makeProj } from '../track/Track';
 import { navigate } from '../ui/nav';
 import type { TouchControls } from '../ui/TouchControls';
 
@@ -54,13 +57,21 @@ export interface SessionSetup {
 }
 
 export type SessionOutcome =
-  | { kind: 'race'; results: RaceResultRow[] }
+  | { kind: 'race'; results: RaceResultRow[]; stats: PlayerStats }
   | { kind: 'quali'; standings: { id: string; e: Entrant; best: number | null }[] }
   | { kind: 'practice'; best: number | null }
   | { kind: 'exit' }
   | { kind: 'restart' };
 
 const STEP = 1 / 120;
+
+/** Datos curiosos de la carrera del jugador para el resumen. */
+export interface PlayerStats {
+  wallHits: number;
+  boosts: number;
+  topSpeed: number;
+  driftTime: number;
+}
 
 class KartView {
   readonly mesh: KartMesh;
@@ -77,6 +88,21 @@ class KartView {
     this.mesh = buildKart(comp.e.color, comp.e.number, { ...(comp.e.look ?? {}), reflective });
     this.mesh.root.rotation.order = 'YXZ';
     scene.add(this.mesh.root);
+  }
+
+  /** Coloca el kart desde la repetición. */
+  setPose(p: { x: number; y: number; z: number; yaw: number; drift: number; steer: number }, dt: number, track: Track): void {
+    const r = this.mesh.root;
+    const moved = Math.hypot(p.x - r.position.x, p.z - r.position.z);
+    r.position.set(p.x, p.y, p.z);
+    r.rotation.y = p.yaw;
+    this.mesh.body.rotation.y = p.drift;
+    for (const piv of this.mesh.frontPivots) piv.rotation.y = -p.steer * 0.45;
+    this.spin += moved / 0.16;
+    for (const w of this.mesh.wheels) w.rotation.x = this.spin;
+    this.mesh.flame.visible = false;
+    void dt;
+    void track;
   }
 
   update(alpha: number, dt: number, track: Track): void {
@@ -120,6 +146,13 @@ export class RaceView {
   private views: KartView[] = [];
   private effects: Effects;
   private tutorial: Tutorial | null = null;
+  private stats: PlayerStats = { wallHits: 0, boosts: 0, topSpeed: 0, driftTime: 0 };
+  private replay: ReplayBuffer | null = null;
+  private tv: TVDirector | null = null;
+  private replayAt = -1;
+  private replayT = -1;
+  private replayEl: HTMLDivElement | null = null;
+  private replayProj = makeProj();
   private tutorialEnd = 0;
   private skids: SkidMarks;
   private hud: Hud;
@@ -193,6 +226,10 @@ export class RaceView {
       this.scene.add(this.ghostMesh.root);
     }
 
+    if (setup.kind === 'race') {
+      this.replay = new ReplayBuffer(this.views.length, 10);
+      this.tv = new TVDirector(this.track);
+    }
     this.hud = new Hud(ctx.uiRoot);
     this.minimap = new Minimap(this.track, window.innerWidth < 700 ? 110 : 170);
     this.hud.mapSlot.appendChild(this.minimap.canvas);
@@ -325,6 +362,16 @@ export class RaceView {
       this.render();
       return;
     }
+    if (this.replayT >= 0) {
+      if (ctrl.pause || ctrl.nav.confirm || ctrl.nav.back) this.endReplay();
+      else this.runReplay(dt);
+      return;
+    }
+    if (this.replayAt > 0 && this.visualTime >= this.replayAt) {
+      this.replayAt = -1;
+      this.startReplay();
+      return;
+    }
     if (ctrl.pause) {
       this.openPause();
       return;
@@ -344,6 +391,20 @@ export class RaceView {
     while (this.acc >= STEP) {
       this.sim.step(STEP, pi, this.respawnReq);
       this.respawnReq = false;
+      if (this.replay && this.replay.tick(STEP)) {
+        const f = this.replay.push();
+        this.views.forEach((v, i) => {
+          const k = v.comp.kart;
+          ReplayBuffer.write(f, i, k.x, k.y, k.z, k.yaw, k.driftVisual, k.steer);
+        });
+      }
+      if (player && !player.finished) {
+        const k = player.kart;
+        if (k.wallImpact > 3) this.stats.wallHits++;
+        if (k.events.includes('boost1') || k.events.includes('boost2')) this.stats.boosts++;
+        if (k.drifting) this.stats.driftTime += STEP;
+        this.stats.topSpeed = Math.max(this.stats.topSpeed, k.vF * 3.6);
+      }
       // Acumular eventos e impactos de todos los pasos de este frame
       for (const v of this.views) {
         const k = v.comp.kart;
@@ -507,6 +568,56 @@ export class RaceView {
     this.ctx.audio.updateLoops(k.speed > 3 ? skid : 0, off * clamp(k.speed / 12, 0, 1), ratio * ratio);
   }
 
+  // ---------- repetición ----------
+  private startReplay(): void {
+    if (!this.replay) return;
+    this.replayT = 0;
+    this.tv?.reset();
+    this.hud.show(false);
+    this.ctx.touch?.show(false);
+    this.ctx.audio.silenceLoops();
+    this.endPrompt.classList.add('hidden');
+    const el2 = el('div', 'replay-ov');
+    el2.innerHTML = `<div class="rp-bars"></div><div class="rp-tag"><i></i> REPETICIÓN</div><button class="btn sm" data-skip>Saltar ▶</button>`;
+    el2.querySelector('[data-skip]')!.addEventListener('click', () => this.endReplay());
+    this.ctx.uiRoot.appendChild(el2);
+    this.replayEl = el2;
+  }
+
+  private runReplay(dt: number): void {
+    const rb = this.replay!;
+    this.replayT += dt * 0.85;
+    if (this.replayT >= rb.duration - 0.05) {
+      this.endReplay();
+      return;
+    }
+    const pose = { x: 0, y: 0, z: 0, yaw: 0, drift: 0, steer: 0 };
+    let target: THREE.Vector3 | null = null;
+    this.views.forEach((v, i) => {
+      rb.sample(this.replayT, i, pose);
+      v.setPose(pose, dt, this.track);
+      if (v.comp === this.player) target = v.mesh.root.position;
+    });
+    if (target && this.tv) {
+      const tp = target as THREE.Vector3;
+      const p = this.track.project(tp.x, tp.z, this.replayProj.idx, this.replayProj, this.replayT === 0 ? this.track.n : 20);
+      this.tv.frame(this.rig.camera, tp, p.s, dt);
+    }
+    this.trackScene.update(dt, target ?? new THREE.Vector3());
+    this.render();
+  }
+
+  private endReplay(): void {
+    if (this.replayT < 0) return;
+    this.replayT = -1;
+    this.replayEl?.remove();
+    this.replayEl = null;
+    this.hud.show(true);
+    this.ctx.touch?.show(this.ctx.touchEnabled());
+    this.rig.reset();
+    this.finishedAt = this.visualTime - 3;
+  }
+
   // ---------- eventos ----------
   private handleEvents(): void {
     const ev = this.sim.events;
@@ -581,6 +692,7 @@ export class RaceView {
           hud.message(`<span class="flagtxt">🏁</span> ¡META! <b>P${pos}</b>`, 'finish', 5);
           a.fanfare();
           this.finishedAt = this.visualTime;
+          if (this.replay && this.replay.duration > 3) this.replayAt = this.visualTime + 1.8;
         }
         break;
       case 'timeup':
@@ -612,10 +724,15 @@ export class RaceView {
       }
       if (rec.best == null || time < rec.best) {
         const prev = rec.best;
+        const before = medalFor(this.track.def, prev);
         rec.best = time;
         changed = true;
         saveGhost(this.setup.trackId, ghost);
-        hud.subMessage(prev == null ? '¡PRIMER RÉCORD PERSONAL!' : `¡NUEVO RÉCORD PERSONAL! ${formatDelta(time - prev)}`, 'purple', 3.5);
+        const after = medalFor(this.track.def, time);
+        if (after && after !== before) {
+          hud.subMessage(`${MEDAL_ICON[after]} ¡MEDALLA DE ${after.toUpperCase()}! ${formatTime(time)}`, 'purple', 4);
+          this.ctx.audio.fanfare();
+        } else hud.subMessage(prev == null ? '¡PRIMER RÉCORD PERSONAL!' : `¡NUEVO RÉCORD PERSONAL! ${formatDelta(time - prev)}`, 'purple', 3.5);
       }
       if (changed) saveRecord(this.setup.trackId, rec);
       if (best && (kind === 'practice' || kind === 'timetrial')) {
@@ -645,9 +762,9 @@ export class RaceView {
         this.endPrompt.classList.remove('hidden');
         (this.endPrompt.querySelector('button') as HTMLElement).focus();
       }
-      if (sim.phase === 'finished') {
+      if (sim.phase === 'finished' && this.replayAt < 0 && this.replayT < 0) {
         this.endPrompt.classList.add('hidden');
-        this.finish({ kind: 'race', results: sim.results() });
+        this.finish({ kind: 'race', results: sim.results(), stats: this.stats });
       }
     } else if (this.qualiEndArmed) {
       // Si estaba en la vuelta de lanzamiento o tarda demasiado, cerrar.
@@ -721,7 +838,12 @@ export class RaceView {
       if (sim.cfg.duration) session += ` · ${sim.timeUp ? 'FIN' : formatClock(sim.timeLeft)}`;
       if (kind === 'timetrial') {
         const rec = this.storedRecord.best;
-        session += ` · Récord ${formatTime(rec ?? this.track.def.record.time)}`;
+        const def = this.track.def;
+        const m = medalFor(def, rec);
+        const mt = medalTimes(def);
+        const next: Medal | null = m === 'oro' ? null : m === 'plata' ? 'oro' : m === 'bronce' ? 'plata' : 'bronce';
+        session += ` · Tu récord ${formatTime(rec)}${m ? ' ' + MEDAL_ICON[m] : ''}`;
+        session += next ? ` · Objetivo ${MEDAL_ICON[next]} ${formatTime(mt[next])}` : ' · ¡Oro conseguido!';
       }
       hud.setSession(session);
       if (kind === 'quali') {
@@ -750,6 +872,7 @@ export class RaceView {
     this.hud.dispose();
     this.pauseEl.remove();
     this.tutorial?.dispose();
+    this.replayEl?.remove();
     this.endPrompt.remove();
     this.ctx.audio.silenceLoops();
   }

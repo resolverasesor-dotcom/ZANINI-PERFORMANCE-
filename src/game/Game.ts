@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { DIFFICULTIES, DRIVERS, type Difficulty, type DriverDef } from '../ai/Drivers';
-import { DEDICATION, DEDICATION_SUB, KART_COLORS } from '../config';
+import { DEDICATION, DEDICATION_SUB } from '../config';
 import { Input } from '../core/Input';
 import { formatTime } from '../core/math';
 import {
@@ -18,7 +18,8 @@ import {
 } from '../core/Settings';
 import { Podium, Showroom } from '../engine/Showroom';
 import type { KartLook } from '../engine/KartModel';
-import type { HelmetStyle } from '../engine/livery';
+import type { HelmetStyle, LiveryStyle } from '../engine/livery';
+import { getProgress, newUnlocks, UNLOCKS, type Unlockable } from '../race/unlocks';
 import {
   applyRace,
   clearChampionship,
@@ -42,7 +43,8 @@ import { el, esc, logoHTML } from '../ui/dom';
 import { drawLayout } from '../ui/Minimap';
 import { navigate } from '../ui/nav';
 import { TouchControls } from '../ui/TouchControls';
-import { RaceView, type GameCtx, type SessionOutcome, type SessionSetup } from './RaceView';
+import { RaceView, type GameCtx, type PlayerStats, type SessionOutcome, type SessionSetup } from './RaceView';
+import { positionsChart, raceSummary } from '../ui/raceReport';
 
 type Mode = 'practice' | 'timetrial' | 'quick' | 'weekend' | 'championship';
 
@@ -221,6 +223,7 @@ export class Game {
   private showMain(): void {
     this.podium?.dispose();
     this.podium = null;
+    this.announceUnlocks();
     this.menuMusic();
     const champ = loadChampionship();
     const tro = loadTrophies();
@@ -518,7 +521,7 @@ export class Game {
     this.runSession(
       { kind: 'race', trackId, laps, difficulty: diff, entrants: grid, duration: 0, label: `${def.name} · Carrera`, mode: 'quick', canEndSession: false },
       (o) => {
-        if (o.kind === 'race') this.showResults(o.results, `${def.name} · Carrera rápida`, null, () => this.showMain(), () => this.startQuickRace(trackId, laps, diff, rivals));
+        if (o.kind === 'race') this.showResults(o.results, `${def.name} · Carrera rápida`, null, () => this.showMain(), () => this.startQuickRace(trackId, laps, diff, rivals), undefined, o.stats);
         else this.showMain();
       },
     );
@@ -542,7 +545,7 @@ export class Game {
       this.runSession(
         { kind: 'race', trackId, laps, difficulty: diff, entrants: grid, duration: 0, label: `${def.name} · Carrera`, mode: 'weekend', canEndSession: false },
         (o) => {
-          if (o.kind === 'race') this.showResults(o.results, `${def.name} · Carrera`, null, () => this.showMain(), null);
+          if (o.kind === 'race') this.showResults(o.results, `${def.name} · Carrera`, null, () => this.showMain(), null, undefined, o.stats);
           else this.showMain();
         },
       );
@@ -595,7 +598,15 @@ export class Game {
     );
   }
 
-  private showResults(results: RaceResultRow[], title: string, points: Record<string, number> | null, onMenu: () => void, onRepeat: (() => void) | null, nextLabel?: string): void {
+  private showResults(
+    results: RaceResultRow[],
+    title: string,
+    points: Record<string, number> | null,
+    onMenu: () => void,
+    onRepeat: (() => void) | null,
+    nextLabel?: string,
+    stats: PlayerStats | null = null,
+  ): void {
     const rows = results
       .map((r) => {
         const time = r.position === 1 ? formatTime(r.total) : r.gap == null ? `+${r.lapsDown} V` : '+' + r.gap.toFixed(3);
@@ -611,12 +622,17 @@ export class Game {
       if (me.position <= 3) t.podiums++;
       saveTrophies(t);
     }
+    this.announceUnlocks();
     const headline = me ? (me.position === 1 ? '¡VICTORIA!' : me.position <= 3 ? `¡PODIO! P${me.position}` : `P${me.position}`) : '';
     if (me && me.position <= 3) this.audio.fanfare();
     this.show(
       `<div class="page">
         <div class="page-head"><h1>${esc(title)}</h1><div class="page-sub headline">${headline}</div></div>
-        <div class="panel"><table class="results"><thead><tr><th>Pos</th><th>Piloto</th><th>Tiempo</th><th>Mejor vuelta</th><th>Pen.</th>${points ? '<th>Pts</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>
+        ${raceSummary(results, stats)}
+        <div class="two-col results-cols">
+          <div class="panel"><table class="results"><thead><tr><th>Pos</th><th>Piloto</th><th>Tiempo</th><th>Mejor vuelta</th><th>Pen.</th>${points ? '<th>Pts</th>' : ''}</tr></thead><tbody>${rows}</tbody></table></div>
+          <div class="panel"><h3>Posiciones vuelta a vuelta</h3>${positionsChart(results)}</div>
+        </div>
         <div class="actions">
           ${onRepeat ? '<button class="btn" data-act="repeat">↻ Repetir</button>' : ''}
           <button class="btn primary big" data-act="menu">${nextLabel ?? 'Menú principal'} ▶</button>
@@ -766,7 +782,7 @@ export class Game {
         (o) => {
           if (o.kind === 'race') {
             const gp = applyRace(c, o.results);
-            this.showResults(o.results, `${gpLabel} · Carrera`, gp.points, () => this.champAfterRace(c, gp.points), null, 'Clasificación general');
+            this.showResults(o.results, `${gpLabel} · Carrera`, gp.points, () => this.champAfterRace(c, gp.points), null, 'Clasificación general', o.stats);
           } else this.champHub();
         },
       );
@@ -799,6 +815,7 @@ export class Game {
     if (champ.isPlayer) {
       const t = loadTrophies();
       t.titles++;
+      if (c.difficulty === 'dificil' || c.difficulty === 'pro') t.titlesHard = (t.titlesHard ?? 0) + 1;
       saveTrophies(t);
     }
     this.audio.fanfare();
@@ -826,16 +843,36 @@ export class Game {
   // ---------------- perfil ----------------
   private showProfile(): void {
     const p = this.profile;
+    const prog = getProgress();
     const render = () => {
+      const lockList = (kind: Unlockable['kind']) => UNLOCKS.filter((u) => u.kind === kind);
+      const swatches = lockList('color')
+        .map((u) => {
+          const ok = u.ok(prog);
+          const on = u.id.toLowerCase() === p.color.toLowerCase();
+          return `<button class="swatch ${on ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="${ok ? 'color' : 'locked'}" data-val="${u.id}" data-req="${esc(u.req)}" style="background:${u.id}" title="${esc(ok ? u.label : '🔒 ' + u.req)}" aria-label="${esc(u.label)}">${ok ? '' : '🔒'}</button>`;
+        })
+        .join('');
+      const chips = (kind: 'helmet' | 'livery', cur: string) =>
+        lockList(kind)
+          .map((u) => {
+            const ok = u.ok(prog);
+            return `<button class="btn chip ${u.id === cur ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="${ok ? kind : 'locked'}" data-val="${u.id}" data-req="${esc(u.req)}">${ok ? '' : '🔒 '}${esc(u.label)}</button>`;
+          })
+          .join('');
+      const total = UNLOCKS.length;
+      const got = UNLOCKS.filter((u) => u.ok(prog)).length;
       this.show(
         `<div class="page narrow">
-          <div class="page-head">${this.backBtn()}<h1>Perfil del piloto</h1></div>
+          <div class="page-head">${this.backBtn()}<h1>Perfil del piloto</h1><div class="page-sub">Desbloqueado ${got}/${total}</div></div>
           <div class="panel form">
             <div class="field"><label>Nombre</label><input id="pname" type="text" maxlength="12" value="${esc(p.name)}" /></div>
             ${this.stepper('Dorsal', 'num', p.number, String(p.number))}
-            <div class="field"><label>Color del kart</label><div class="swatches">${KART_COLORS.map(
-              (c) => `<button class="swatch ${c === p.color ? 'on' : ''}" data-act="color" data-val="${c}" style="background:${c}" aria-label="${c}"></button>`,
-            ).join('')}</div></div>
+            <div class="field"><label>Color del kart</label><div class="swatches">${swatches}</div></div>
+            <div class="field"><label>Decoración</label><div class="choices">${chips('livery', p.livery)}</div></div>
+            <div class="field"><label>Casco</label><div class="choices">${chips('helmet', p.helmet)}</div></div>
+            <div class="hint lock-hint" id="lockhint">Gana carreras, podios, campeonatos y medallas de contrarreloj para desbloquear más.</div>
+            <div class="stats-row">🏆 ${prog.titles} títulos · 🥇 ${prog.wins} victorias · 🍾 ${prog.podiums} podios · ⏱ ${prog.records} récords · 🏅 ${prog.golds} oros</div>
             <button class="btn primary" data-act="save">Guardar</button>
           </div>
         </div>`,
@@ -863,6 +900,21 @@ export class Game {
             p.color = b.dataset.val!;
             render();
           },
+          livery: (b) => {
+            this.saveProfileFromForm();
+            p.livery = b.dataset.val as LiveryStyle;
+            render();
+          },
+          helmet: (b) => {
+            this.saveProfileFromForm();
+            p.helmet = b.dataset.val as HelmetStyle;
+            render();
+          },
+          locked: (b) => {
+            const h = this.screen.querySelector('#lockhint');
+            if (h) h.innerHTML = `🔒 <b>Bloqueado:</b> ${esc(b.dataset.req ?? '')}`;
+            this.audio.warning();
+          },
         },
         () => {
           this.saveProfileFromForm();
@@ -873,6 +925,25 @@ export class Game {
       this.showroom.setKart(this.playerLook());
     };
     render();
+  }
+
+  /** Muestra avisos de lo que se acaba de desbloquear. */
+  private announceUnlocks(): void {
+    const fresh = newUnlocks();
+    fresh.forEach((u, i) => {
+      setTimeout(() => {
+        const kind = u.kind === 'color' ? 'Color' : u.kind === 'helmet' ? 'Casco' : 'Decoración';
+        let box = this.ui.querySelector('.toasts');
+        if (!box) {
+          box = el('div', 'toasts');
+          this.ui.appendChild(box);
+        }
+        const t = el('div', 'toast', `🔓 <b>¡Desbloqueado!</b> ${kind}: ${esc(u.label)}`);
+        box.appendChild(t);
+        this.audio.lapChime(true);
+        setTimeout(() => t.remove(), 4200);
+      }, 600 + i * 1400);
+    });
   }
 
   private saveProfileFromForm(): void {

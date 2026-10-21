@@ -34,7 +34,8 @@ Elige un modo en el menú principal:
 | **Contrarreloj** | Bate el récord del circuito contra tu fantasma. El récord y el fantasma se guardan. |
 | **Carrera rápida** | Circuito, vueltas, dificultad y número de rivales a tu gusto. |
 | **Fin de semana** | Libres (5 min) → Clasificación (3 min) → Carrera. La parrilla sale por tiempos. |
-| **Campeonato** | 6 Grandes Premios, cada uno con clasificación y carrera. Puntos 25-18-15-12-10-8-6-4-2-1 y +1 por vuelta rápida si acabas en el top 10. Se guarda tras cada sesión: puedes cerrar el navegador y continuar. |
+| **Tutorial** | 20 segundos como máximo: acelerar, girar, derrapar y mini-turbo. Se ofrece la primera vez. |
+| **Campeonato** | 6 Grandes Premios, cada uno con clasificación y carrera. Puntos 25-18-15-12-10-8-6-4-2-1 y +1 por vuelta rápida si acabas en el top 10. Se guarda tras cada sesión: puedes cerrar el navegador y continuar. Dos calendarios: **Campeonato Zanini** y **Copa Costa Blanca**. |
 
 Reglas:
 
@@ -50,6 +51,28 @@ Consejos para ir rápido:
 - Ponte detrás de otro kart en recta para coger **rebufo**.
 - La hierba, la grava y la arena frenan mucho. Los pianos no.
 - Si te quedas atascado, pulsa **reaparecer**.
+
+## Circuitos
+
+**Circuitos Zanini:** Zanini Ring, Costa Blanca, Montaña (ocho con puente), Urbano Nocturno, Cantera y Gran Premio Zanini.
+
+**Kartódromos de la Costa Blanca** (estrechos y revirados, con su monumento):
+Benidorm (rascacielos e Intempo), Calpe (Peñón de Ifach), Altea (atardecer y cúpula azul),
+Torrevieja (lagunas rosas y montañas de sal) y Dénia (puerto, castillo y faro).
+
+En **Contrarreloj** cada circuito tiene medallas 🥇🥈🥉 (el oro es el récord del circuito).
+
+## Desbloqueables
+
+En *Perfil* eliges color, decoración del kart (la **Edición Ale** viene de serie) y casco.
+Otros se ganan jugando: victorias, podios, campeonatos (en Difícil/Pro, el kart de **oro cromado**),
+récords y medallas de contrarreloj.
+
+## Después de la carrera
+
+Al cruzar la meta hay una **repetición** de los últimos segundos con cámaras de TV (se puede saltar).
+Los resultados incluyen un **gráfico de posiciones vuelta a vuelta** y un resumen: ganador, vuelta rápida,
+mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapando… y besos al muro).
 
 ## Controles
 
