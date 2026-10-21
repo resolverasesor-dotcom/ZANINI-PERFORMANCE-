@@ -1797,10 +1797,8 @@ table.results {
   .touch .tsteer {
     width: 52vw;
   }
-  .touch .tright {
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
+  .touch .tsteer {
+    width: 50vw;
   }
   .touch-on .hud-br {
     top: 128px;
@@ -1872,4 +1870,98 @@ table.results {
 .rh-sub {
   opacity: 0.8;
   margin-bottom: 10px;
+}
+
+/* ---------- Controles táctiles v3: racimo derecho para el pulgar ---------- */
+.touch .tright {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  grid-template-areas: '. drift' 'brake accel';
+  align-items: end;
+  justify-items: center;
+  gap: 8px 10px;
+}
+.touch .tright .tdrift {
+  grid-area: drift;
+}
+.touch .tright .tbrake {
+  grid-area: brake;
+}
+.touch .tright .taccel {
+  grid-area: accel;
+}
+/* Sin ACEL (aceleración automática): DERRAPE baja a la esquina */
+.touch.auto .tright {
+  grid-template-areas: 'brake drift';
+  grid-template-rows: auto;
+}
+.touch.steer-inclinar .tright {
+  grid-template-areas: 'drift accel';
+  grid-template-rows: auto;
+}
+.touch.steer-inclinar.auto .tright {
+  grid-template-areas: 'drift';
+}
+.tbtn.taccel {
+  width: calc(var(--tb) * 1.3);
+  height: calc(var(--tb) * 1.3);
+  font-size: calc(var(--tb) * 0.22);
+}
+.tbtn.tdrift {
+  width: calc(var(--tb) * 1.12);
+  height: calc(var(--tb) * 1.12);
+}
+.tbtn.tbrake.big {
+  width: calc(var(--tb) * 1.2);
+  height: calc(var(--tb) * 1.2);
+}
+.touch .tleft {
+  align-items: flex-end;
+}
+.ttilt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  color: rgba(255, 255, 255, 0.75);
+  text-shadow: 0 1px 2px #000;
+}
+.ttilt-level {
+  width: 96px;
+  height: 18px;
+  border-radius: 9px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+.ttilt-level i {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 12px;
+  height: 10px;
+  margin-left: -6px;
+  border-radius: 5px;
+  background: var(--yellow);
+}
+@media (orientation: portrait) {
+  .touch {
+    --tb: clamp(58px, 17vw, 80px);
+  }
+}
+
+@media (orientation: landscape) {
+  .touch-on .hud-br {
+    top: 92px;
+  }
+  .touch-on .hud-gauge {
+    width: 74px;
+    height: 74px;
+  }
+  .touch-on .hud-speed {
+    font-size: 22px;
+  }
 }

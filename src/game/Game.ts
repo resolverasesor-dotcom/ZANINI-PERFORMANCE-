@@ -12,8 +12,12 @@ import {
   loadSettings,
   saveProfile,
   saveSettings,
+  ASSIST_LABELS,
+  SPEED_CLASS,
   type Action,
+  type AssistLevel,
   type Profile,
+  type SpeedClass,
   type Settings,
 } from '../core/Settings';
 import { Podium, Showroom } from '../engine/Showroom';
@@ -398,11 +402,13 @@ export class Game {
             ${this.stepper('Vueltas', 'laps', laps, `${laps}`)}
             ${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), diff)}
             ${mode === 'quick' ? this.stepper('Rivales', 'rivals', rivals, `${rivals}`) : ''}
+            ${this.drivingFields()}
             <div class="hint">${mode === 'weekend' ? 'Libres (5 min) → Clasificación (3 min) → Carrera. La parrilla sale por tiempos.' : 'Saldrás desde mitad de parrilla.'} ${diff === 'facil' ? 'En Fácil la IA se reagrupa para que la carrera esté siempre viva.' : ''}</div>
             <button class="btn primary big" data-act="go">¡A correr! ▶</button>
           </div>
         </div>`,
         {
+          ...this.drivingHandlers(() => render()),
           back: () => this.showTrackSelect(mode),
           'laps-': () => {
             laps = Math.max(1, laps - 1);
@@ -438,6 +444,28 @@ export class Game {
       );
     };
     render();
+  }
+
+  /** Cilindrada y ayudas (se guardan en los ajustes y valen para todas las sesiones). */
+  private drivingFields(): string {
+    const s = this.settings;
+    return `${this.choice('Cilindrada', 'sclass', (Object.keys(SPEED_CLASS) as SpeedClass[]).map((k) => [k, SPEED_CLASS[k].label]), s.speedClass)}
+      ${this.choice('Ayudas', 'assist', (Object.keys(ASSIST_LABELS) as AssistLevel[]).map((k) => [k, ASSIST_LABELS[k]]), s.assist)}`;
+  }
+
+  private drivingHandlers(rerender: () => void): Record<string, (b: HTMLElement) => void> {
+    return {
+      sclass: (b) => {
+        this.settings.speedClass = b.dataset.val as SpeedClass;
+        saveSettings(this.settings);
+        rerender();
+      },
+      assist: (b) => {
+        this.settings.assist = b.dataset.val as AssistLevel;
+        saveSettings(this.settings);
+        rerender();
+      },
+    };
   }
 
   private stepper(label: string, key: string, _v: number, text: string): string {
@@ -720,11 +748,13 @@ export class Game {
             <div class="hint">${SERIES[series].tracks.map((id) => esc(getCircuit(id).name)).join(' · ')}</div>
             ${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), diff)}
             ${this.stepper('Vueltas por carrera', 'laps', laps, laps === 0 ? 'Las de cada circuito' : String(laps))}
+            ${this.drivingFields()}
             <div class="hint">Puntos: ${POINTS_LEGEND}. Se guarda automáticamente tras cada sesión.</div>
             <button class="btn primary big" data-act="go">Empezar ▶</button>
           </div>
         </div>`,
         {
+          ...this.drivingHandlers(() => render()),
           back: () => this.showMain(),
           series: (b) => {
             series = b.dataset.val as SeriesKey;
@@ -1018,7 +1048,9 @@ export class Game {
       body = `${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), s.difficulty)}
         ${this.stepper('Vueltas (carrera rápida)', 'laps', s.laps, s.laps === 0 ? 'Las del circuito' : String(s.laps))}
         ${this.stepper('Rivales (carrera rápida)', 'rivals', s.rivals, String(s.rivals))}
-        <div class="hint">Fácil: la IA se reagrupa (rubber-banding). Normal, Difícil y Pro: competición pura.</div>`;
+        ${this.drivingFields()}
+        <div class="hint">Fácil: la IA se reagrupa (rubber-banding). Normal, Difícil y Pro: competición pura.<br>
+        Cilindrada: velocidad punta de todos los karts. Ayuda media: te mantiene en la pista y frena si entras pasado. Ayuda máxima: además te guía por la trazada.</div>`;
     } else if (tab === 'graficos') {
       body = `${this.choice('Calidad', 'quality', [['bajo', 'Baja (móvil)'], ['medio', 'Media'], ['alto', 'Alta']], s.quality)}
         ${this.choice('Líneas de velocidad', 'speedlines', [['on', 'Sí'], ['off', 'No']], s.speedLines ? 'on' : 'off')}
@@ -1035,7 +1067,7 @@ export class Game {
         <button class="btn sm" data-act="resetkeys">Restablecer teclas</button>
         <div class="hint"><b>Mando:</b> stick/cruceta girar · RT/A acelerar · LT/X frenar · RB/LB/B derrapar · Y reaparecer · Select cámara · Start pausa.</div>
         ${this.choice('Controles táctiles', 'touch', [['auto', 'Auto'], ['on', 'Siempre'], ['off', 'Nunca']], s.touch)}
-        ${this.choice('Dirección táctil', 'touchsteer', [['pad', 'Barra deslizante'], ['botones', 'Flechas']], s.touchSteer)}
+        ${this.choice('Dirección táctil', 'touchsteer', [['pad', 'Barra deslizante'], ['botones', 'Flechas'], ['inclinar', 'Inclinar el móvil']], s.touchSteer)}
         ${this.choice('Aceleración automática (táctil)', 'autoaccel', [['on', 'Sí'], ['off', 'No']], s.autoAccel ? 'on' : 'off')}
         ${this.choice('Vibración del mando', 'vibration', [['on', 'Sí'], ['off', 'No']], s.vibration ? 'on' : 'off')}`;
     } else {
@@ -1055,6 +1087,7 @@ export class Game {
         <div class="panel form">${body}</div>
       </div>`,
       {
+        ...this.drivingHandlers(() => re()),
         back,
         tab: (b) => this.showSettings(back, b.dataset.val!),
         diff: (b) => {

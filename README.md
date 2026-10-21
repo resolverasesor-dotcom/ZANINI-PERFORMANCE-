@@ -22,6 +22,7 @@ Pruebas automáticas (sin navegador):
 ```bash
 npm run test:tracks   # valida los circuitos (solapes, radios, recta de salida)
 npm run test:ai       # 12 IA corren una carrera en cada circuito: nadie se atasca ni atraviesa muros
+npm run test:assists  # comprueba que las ayudas mantienen en pista a un jugador torpe
 ```
 
 ## Cómo jugar
@@ -89,11 +90,18 @@ mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapand
 
 Las teclas se pueden **reasignar** en *Ajustes → Controles*. Los menús se manejan también con
 flechas o con el mando (A aceptar, B volver). En móvil los controles táctiles aparecen solos
-(se pueden forzar o quitar en Ajustes): **barra de dirección analógica** a la izquierda (pon el dedo y
-deslízalo: cuanto más lejos del centro, más giras) y DERRAPE/FRENO a la derecha. La **aceleración
-automática** viene activada en móvil (se puede quitar en Ajustes → Controles, y también volver a las flechas).
-Se juega mejor en horizontal: el juego intenta girar la pantalla y, si no puede, te lo sugiere
-(con opción de seguir en vertical).
+(se pueden forzar o quitar en Ajustes). A la izquierda, la **barra de dirección analógica**: pon el dedo
+y deslízalo (cuanto más lejos del centro, más giras). También hay flechas o **inclinar el móvil**.
+A la derecha, el racimo del pulgar: **ACEL** grande en la esquina, **DERRAPE** encima (también acelera:
+puedes deslizar el pulgar de uno a otro sin soltar) y **FRENO** al lado. La aceleración automática es
+opcional (desactivada por defecto; se cambia en Ajustes o en la pausa). Mejor en horizontal.
+
+### Cilindrada y ayudas
+
+- **Cilindrada:** 50cc (tranquilo), 100cc o 150cc (rápido). En móvil empieza en 100cc.
+- **Ayudas:** *Media* te mantiene en la pista y frena si entras pasado en una curva; *Máxima* añade un
+  copiloto que conduce cuando no tocas la dirección (ideal para empezar). Se cambian en Ajustes, al
+  preparar la carrera o desde la pausa. Solo afectan a tu kart.
 
 ## Ajustes
 

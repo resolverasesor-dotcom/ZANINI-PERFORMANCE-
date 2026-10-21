@@ -35,6 +35,17 @@ export const KART = {
   driftLevel2: 2.05,
 };
 
+/** Valores originales (150cc) para poder cambiar de cilindrada entre sesiones. */
+const KART_BASE = { vmax: KART.vmax, accel: KART.accel, boostAccel: KART.boostAccel };
+
+/** Aplica una cilindrada: factor de velocidad punta y de aceleración. */
+export function setKartClass(vmaxFactor: number, accelFactor: number): void {
+  KART.vmax = KART_BASE.vmax * vmaxFactor;
+  KART.accel = KART_BASE.accel * accelFactor;
+  KART.boostAccel = KART_BASE.boostAccel * accelFactor;
+}
+
+
 export type SurfaceKind = 'track' | 'kerb' | 'grass' | 'gravel' | 'sand' | 'asphalt';
 
 const SURF: Record<SurfaceKind, { grip: number; drag: number; vmax: number }> = {

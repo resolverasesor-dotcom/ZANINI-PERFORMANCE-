@@ -1,5 +1,6 @@
 import { computeRacingLine } from '../ai/RacingLine';
 import { referenceLap } from '../race/RaceSim';
+import { KART } from '../physics/Kart';
 import { getCircuit } from './circuits/index';
 import { Track } from './Track';
 
@@ -19,7 +20,7 @@ export function getTrack(id: string): Track {
 
 /** Vuelta de referencia de una IA perfecta al ritmo indicado (simulada y cacheada). */
 export function getRefLap(id: string, speedFactor = 1): number {
-  const key = `${id}@${speedFactor}`;
+  const key = `${id}@${speedFactor}@${KART.vmax}`;
   let r = refs.get(key);
   if (r == null) {
     r = referenceLap(getTrack(id), speedFactor);

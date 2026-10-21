@@ -38,17 +38,23 @@ export class TouchControls {
   build(): void {
     const s = this.settings();
     const auto = s.autoAccel;
-    const steer =
-      s.touchSteer === 'botones'
-        ? `<div class="tsteer-btns"><button class="tbtn tarrow" data-k="left" aria-label="Izquierda">◀</button><button class="tbtn tarrow" data-k="right" aria-label="Derecha">▶</button></div>`
-        : `<div class="tsteer" data-steer aria-label="Dirección: desliza el dedo"><div class="tsteer-track"><span>◀</span><span>▶</span></div><div class="tsteer-knob"></div></div>`;
-    this.root.className = 'touch' + (auto ? ' auto' : '');
+    const mode = s.touchSteer;
+    let left: string;
+    if (mode === 'botones') {
+      left = `<div class="tsteer-btns"><button class="tbtn tarrow" data-k="left" aria-label="Izquierda">◀</button><button class="tbtn tarrow" data-k="right" aria-label="Derecha">▶</button></div>`;
+    } else if (mode === 'inclinar') {
+      // Con el móvil inclinado el pulgar izquierdo queda libre: ahí va el freno
+      left = `<div class="ttilt"><div class="ttilt-level"><i></i></div><small>Inclina el móvil</small></div><button class="tbtn tbrake big" data-k="brake" aria-label="Frenar">FRENO</button>`;
+    } else {
+      left = `<div class="tsteer" data-steer aria-label="Dirección: desliza el dedo"><div class="tsteer-track"><span>◀</span><span>▶</span></div><div class="tsteer-knob"></div></div>`;
+    }
+    this.root.className = `touch ${auto ? 'auto' : 'manual'} steer-${mode}`;
     this.root.innerHTML = `
-      <div class="tzone tleft">${steer}</div>
+      <div class="tzone tleft">${left}</div>
       <div class="tzone tright">
-        <button class="tbtn tbrake" data-k="brake" aria-label="Frenar">FRENO</button>
-        ${auto ? '' : '<button class="tbtn taccel" data-k="accel" aria-label="Acelerar">ACEL</button>'}
         <button class="tbtn tdrift" data-k="drift" aria-label="Derrapar">DERRAPE</button>
+        ${mode === 'inclinar' ? '' : '<button class="tbtn tbrake" data-k="brake" aria-label="Frenar">FRENO</button>'}
+        ${auto ? '' : '<button class="tbtn taccel" data-k="accel" aria-label="Acelerar">ACEL</button>'}
       </div>
       <div class="ttop">
         <button class="tbtn tsmall" data-e="respawn" aria-label="Reaparecer">↺</button>
@@ -56,21 +62,55 @@ export class TouchControls {
       </div>`;
     this.pad = this.root.querySelector('[data-steer]') as HTMLElement;
     this.knob = this.root.querySelector('.tsteer-knob') as HTMLElement;
+    this.level = this.root.querySelector('.ttilt-level i') as HTMLElement | null;
     this.active.clear();
     this.steerPointer = null;
+    this.tiltCenter = null;
+    this.setTilt(mode === 'inclinar');
     this.sync();
+  }
+
+  // ---- Dirección por inclinación ----
+  private level: HTMLElement | null = null;
+  private tiltOn = false;
+  private tiltCenter: number | null = null;
+  private onTilt = (e: DeviceOrientationEvent) => {
+    if (e.beta == null || e.gamma == null) return;
+    const ang = (screen.orientation?.angle ?? (window as unknown as { orientation?: number }).orientation ?? 0) as number;
+    // Ángulo de "volante" según cómo esté girada la pantalla
+    let a = ang === 90 ? e.beta : ang === 270 || ang === -90 ? -e.beta : e.gamma;
+    if (this.tiltCenter == null) this.tiltCenter = a;
+    a -= this.tiltCenter;
+    const dead = 2.5;
+    const v = Math.abs(a) < dead ? 0 : Math.sign(a) * Math.min(1, (Math.abs(a) - dead) / 20);
+    this.input.touch.steerAxis = v;
+    if (this.level) this.level.style.transform = `translateX(${v * 34}px)`;
+  };
+
+  private setTilt(on: boolean): void {
+    if (on === this.tiltOn) return;
+    this.tiltOn = on;
+    if (on) {
+      const DOE = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
+      // iOS pide permiso (debe venir de un gesto: el toque que inició la carrera)
+      if (DOE.requestPermission) DOE.requestPermission().catch(() => undefined);
+      window.addEventListener('deviceorientation', this.onTilt);
+    } else {
+      window.removeEventListener('deviceorientation', this.onTilt);
+      this.input.touch.steerAxis = 0;
+    }
   }
 
   private steerFrom(e: PointerEvent): void {
     if (!this.pad) return;
     const r = this.pad.getBoundingClientRect();
-    const half = r.width * 0.42;
+    const half = r.width * 0.46;
     let v = (e.clientX - (r.left + r.width / 2)) / half;
     v = Math.max(-1, Math.min(1, v));
     const knobX = v * half;
-    // zona muerta pequeña y curva suave para correcciones finas
+    // zona muerta y curva progresiva: el centro es fino, los extremos giran a fondo
     const a = Math.abs(v);
-    const out = a < 0.08 ? 0 : Math.sign(v) * Math.pow((a - 0.08) / 0.92, 1.25);
+    const out = a < 0.1 ? 0 : Math.sign(v) * Math.pow((a - 0.1) / 0.9, 1.6);
     this.input.touch.steerAxis = out === 0 ? 0 : out;
     if (this.knob) this.knob.style.transform = `translate(calc(-50% + ${knobX}px), -50%)`;
     this.pad.classList.add('down');
@@ -113,12 +153,17 @@ export class TouchControls {
     if (!this.active.has(e.pointerId)) return;
     e.preventDefault();
     const prev = this.active.get(e.pointerId)!;
-    // Con flechas se puede deslizar el dedo de una a otra
-    if (prev !== 'left' && prev !== 'right') return;
+    // Se puede deslizar el dedo entre flechas, y entre ACEL y DERRAPE sin levantarlo
+    const groups = [['left', 'right'], ['accel', 'drift']];
+    const g = groups.find((x) => x.includes(prev));
+    if (!g) return;
     const b = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-k]') as HTMLElement | null;
     const k = b?.dataset.k;
-    if (k === 'left' || k === 'right') this.active.set(e.pointerId, k);
-    this.sync();
+    if (k && g.includes(k) && k !== prev) {
+      this.active.set(e.pointerId, k);
+      if (k === 'drift' && navigator.vibrate && this.settings().vibration) navigator.vibrate(10);
+      this.sync();
+    }
   }
 
   private onUp(e: PointerEvent): void {
@@ -155,6 +200,7 @@ export class TouchControls {
     this.input.touchVisible = v;
     if (v) this.input.lastDevice = 'touch';
     if (!v) {
+      this.setTilt(false);
       this.active.clear();
       this.steerPointer = null;
       this.input.touch.steerAxis = 0;

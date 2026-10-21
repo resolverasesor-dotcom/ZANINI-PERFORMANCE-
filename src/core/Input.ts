@@ -155,6 +155,8 @@ export class Input {
       if (t.accel) throttle = 1;
       if (t.brake) brake = 1;
       drift = drift || t.drift;
+      // En táctil, derrapar también acelera: no hace falta soltar el gas con el pulgar
+      if (t.drift && !t.brake) throttle = 1;
     }
     if (this.autoAccelActive && !t.brake) throttle = 1;
     respawn = respawn || this.touchEdges.respawn;

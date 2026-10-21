@@ -4,14 +4,14 @@ import { DIFF_SPEED, type Difficulty } from '../ai/Drivers';
 import type { Input } from '../core/Input';
 import { clamp, damp, formatDelta, formatTime } from '../core/math';
 import type { CameraMode, Profile, Settings } from '../core/Settings';
-import { saveSettings } from '../core/Settings';
+import { ASSIST_LABELS, saveSettings, SPEED_CLASS, type AssistLevel } from '../core/Settings';
 import { CameraRig } from '../engine/CameraRig';
 import { Effects, SkidMarks } from '../engine/Effects';
 import { buildKart, wavePennant, type KartMesh } from '../engine/KartModel';
 import { skyEnvironment } from '../engine/envmap';
 import type { PostFX } from '../engine/PostFX';
 import { TrackScene } from '../engine/TrackScene';
-import { KART, type KartEvent, type KartInput, emptyInput } from '../physics/Kart';
+import { KART, setKartClass, type KartEvent, type KartInput, emptyInput } from '../physics/Kart';
 import { ghostPose, GhostRecorder, loadGhost, loadRecord, saveGhost, saveRecord, type GhostData } from '../race/Ghost';
 import { RaceSim, type Competitor, type Entrant, type RaceResultRow, type SessionKind, type SimEvent } from '../race/RaceSim';
 import { getRefLap, getTrack } from '../track/trackCache';
@@ -22,6 +22,7 @@ import { el } from '../ui/dom';
 import { Hud, type TowerRow } from '../ui/Hud';
 import { Minimap } from '../ui/Minimap';
 import { Tutorial } from '../ui/Tutorial';
+import { DriverAssist } from '../race/assists';
 import { MEDAL_ICON, medalFor, medalTimes, type Medal } from '../race/medals';
 import { ReplayBuffer, TVDirector } from './Replay';
 import { makeProj } from '../track/Track';
@@ -197,6 +198,9 @@ export class RaceView {
     private onDone: (o: SessionOutcome) => void,
   ) {
     this.track = getTrack(setup.trackId);
+    // Cilindrada de esta sesión (afecta a todos los karts por igual)
+    const sc = SPEED_CLASS[ctx.settings.speedClass] ?? SPEED_CLASS['150'];
+    setKartClass(sc.vmax, sc.accel);
     const refLap = setup.kind === 'quali' ? getRefLap(setup.trackId, DIFF_SPEED[setup.difficulty]) : undefined;
     this.sim = new RaceSim({
       track: this.track,
@@ -324,6 +328,8 @@ export class RaceView {
         <button class="btn primary" data-act="resume">Continuar</button>
         ${s.kind !== 'race' && s.canEndSession ? `<button class="btn" data-act="end">${endLabel}</button>` : ''}
         <button class="btn" data-act="restart">Reiniciar</button>
+        <button class="btn" data-act="assist">Ayudas: <b>${ASSIST_LABELS[this.ctx.settings.assist]}</b></button>
+        ${this.ctx.touchEnabled() ? `<button class="btn" data-act="autoaccel">Aceleración automática: <b>${this.ctx.settings.autoAccel ? 'Sí' : 'No'}</b></button>` : ''}
         <button class="btn" data-act="camera">Cámara: <b>${{ trasera: 'Trasera', cercana: 'Cercana', capo: 'Capó' }[this.rig.mode]}</b></button>
         <button class="btn danger" data-act="exit" >Salir al menú</button>
         <button class="hidden" data-back data-act="resume"></button>
@@ -343,6 +349,15 @@ export class RaceView {
           this.endSession();
         } else if (a === 'camera') {
           this.cycleCamera();
+          this.openPause();
+        } else if (a === 'assist') {
+          const order: AssistLevel[] = ['ninguna', 'media', 'maxima'];
+          this.ctx.settings.assist = order[(order.indexOf(this.ctx.settings.assist) + 1) % order.length];
+          saveSettings(this.ctx.settings);
+          this.openPause();
+        } else if (a === 'autoaccel') {
+          this.ctx.settings.autoAccel = !this.ctx.settings.autoAccel;
+          saveSettings(this.ctx.settings);
           this.openPause();
         }
       }),
@@ -425,6 +440,7 @@ export class RaceView {
     pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
     pi.brake = ctrl.brake;
     pi.drift = ctrl.drift;
+    if (this.player && !this.player.ai && this.sim.phase !== 'countdown') this.applyAssists(pi, Math.min(dt, 0.1));
 
     this.acc += Math.min(dt, 0.1) * DEBUG.timeScale;
     const player = this.player;
@@ -613,6 +629,14 @@ export class RaceView {
     const skid = k.drifting ? 0.85 : clamp((Math.abs(k.vL) - 1.5) / 5, 0, 1);
     const off = k.surface === 'grass' || k.surface === 'gravel' || k.surface === 'sand' ? 1 : k.surface === 'kerb' ? 0.55 : 0;
     this.ctx.audio.updateLoops(k.speed > 3 ? skid : 0, off * clamp(k.speed / 12, 0, 1), ratio * ratio);
+  }
+
+  // ---------- ayudas a la conducción ----------
+  private assist: DriverAssist | null = null;
+
+  private applyAssists(pi: KartInput, dt: number): void {
+    if (!this.assist) this.assist = new DriverAssist(this.player!.kart, this.track);
+    this.assist.apply(pi, this.ctx.settings.assist, dt);
   }
 
   // ---------- orientación ----------
@@ -860,8 +884,10 @@ export class RaceView {
     const ratio = Math.abs(k.vF) / KART.vmax;
     hud.setSpeed(Math.abs(k.vF) * 3.6, ratio, k.boostTime > 0);
     hud.setDrift(k.driftLevel, k.driftCharge, k.drifting);
-    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 + (k.boostTime > 0 ? 0.55 : 0) : 0);
-    const sl = this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) + (k.boostTime > 0 ? 0.5 : 0) : 0;
+    // En móvil (pantalla pequeña) los efectos de velocidad se suavizan a la mitad
+    const fxK = this.ctx.touchEnabled() ? 0.5 : 1;
+    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? (clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 + (k.boostTime > 0 ? 0.55 : 0)) * fxK : 0);
+    const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) + (k.boostTime > 0 ? 0.5 : 0) : 0);
     hud.drawSpeedLines(Math.min(1, sl), k.boostTime > 0);
 
     // Dirección contraria

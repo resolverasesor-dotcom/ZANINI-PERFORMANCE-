@@ -4,6 +4,22 @@ import type { HelmetStyle, LiveryStyle } from '../engine/livery';
 
 export type Quality = 'bajo' | 'medio' | 'alto';
 export type CameraMode = 'trasera' | 'cercana' | 'capo';
+export type SpeedClass = '50' | '100' | '150';
+export type AssistLevel = 'ninguna' | 'media' | 'maxima';
+
+/** Factor de velocidad punta / aceleración por cilindrada. */
+export const SPEED_CLASS: Record<SpeedClass, { label: string; vmax: number; accel: number }> = {
+  '50': { label: '50cc · tranquilo', vmax: 0.68, accel: 0.8 },
+  '100': { label: '100cc · normal', vmax: 0.84, accel: 0.9 },
+  '150': { label: '150cc · rápido', vmax: 1, accel: 1 },
+};
+
+export const ASSIST_LABELS: Record<AssistLevel, string> = {
+  ninguna: 'Sin ayudas',
+  media: 'Ayuda media',
+  maxima: 'Ayuda máxima',
+};
+
 export type Action = 'accel' | 'brake' | 'left' | 'right' | 'drift' | 'respawn' | 'camera' | 'pause';
 
 export const ACTION_LABELS: Record<Action, string> = {
@@ -42,8 +58,12 @@ export interface Settings {
   keys: Record<Action, string[]>;
   touch: 'auto' | 'on' | 'off';
   autoAccel: boolean;
-  /** Dirección táctil: barra deslizante analógica o flechas. */
-  touchSteer: 'pad' | 'botones';
+  /** Dirección táctil: barra deslizante analógica, flechas o inclinando el móvil. */
+  touchSteer: 'pad' | 'botones' | 'inclinar';
+  /** Cilindrada: velocidad punta del kart (y de los rivales). */
+  speedClass: SpeedClass;
+  /** Ayudas a la conducción del jugador. */
+  assist: AssistLevel;
   /** Versión de los ajustes táctiles (para migrar valores por defecto). */
   touchV?: number;
   speedLines: boolean;
@@ -78,9 +98,11 @@ export function defaultSettings(): Settings {
     camera: 'trasera',
     keys: structuredClone(DEFAULT_KEYS),
     touch: 'auto',
-    autoAccel: mobile,
+    autoAccel: false,
     touchSteer: 'pad',
-    touchV: 2,
+    speedClass: mobile ? '100' : '150',
+    assist: mobile ? 'media' : 'ninguna',
+    touchV: 3,
     speedLines: true,
     ghost: true,
     vibration: true,
@@ -91,10 +113,16 @@ export function loadSettings(): Settings {
   const s = { ...defaultSettings(), ...load<Partial<Settings>>('settings', {}) };
   s.keys = { ...DEFAULT_KEYS, ...s.keys };
   // Migración: nuevos controles táctiles (dirección analógica y aceleración automática en móvil)
-  if ((s.touchV ?? 1) < 2) {
-    s.touchV = 2;
-    s.touchSteer = 'pad';
-    if (isMobile()) s.autoAccel = true;
+  // Migración v3: la aceleración automática vuelve a ser opcional (desactivada) y en
+  // móvil se activan 100cc y ayudas medias, que hacen el juego manejable con el pulgar.
+  if ((s.touchV ?? 1) < 3) {
+    s.touchV = 3;
+    s.autoAccel = false;
+    if (s.touchSteer !== 'botones') s.touchSteer = 'pad';
+    if (isMobile()) {
+      s.speedClass = '100';
+      s.assist = 'media';
+    }
   }
   return s;
 }

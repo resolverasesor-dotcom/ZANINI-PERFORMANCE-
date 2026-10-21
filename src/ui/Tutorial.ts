@@ -49,10 +49,16 @@ export class Tutorial {
       input.autoAccelActive
         ? { text: 'El kart <b>acelera solo</b> 🚀 · <kbd>FRENO</kbd> para frenar', max: 3.5, done: () => this.kart.vF > 13 }
         : { text: `Mantén <kbd>${K.accel}</kbd> para acelerar`, max: 4.5, done: () => this.kart.vF > 13 },
-      dev === 'touch' && settings.touchSteer !== 'botones'
+      dev === 'touch' && settings.touchSteer === 'inclinar'
+        ? { text: '<b>Inclina el móvil</b> como un volante para girar', max: 4.5, done: () => this.steerT > 0.35 }
+        : dev === 'touch' && settings.touchSteer !== 'botones'
         ? { text: 'Pon el dedo en la <b>barra de la izquierda</b> y deslízalo para girar', max: 4.5, done: () => this.steerT > 0.35 }
         : { text: `Gira con <kbd>${K.steer}</kbd>`, max: 3.5, done: () => this.steerT > 0.35 },
-      { text: `Mantén <kbd>${K.drift}</kbd> mientras giras para <b>DERRAPAR</b>`, max: 6, done: () => this.kart.driftLevel >= 1 },
+      {
+        text: dev === 'touch' ? `Mantén <kbd>DERRAPE</kbd> mientras giras (también acelera)` : `Mantén <kbd>${K.drift}</kbd> mientras giras para <b>DERRAPAR</b>`,
+        max: 6,
+        done: () => this.kart.driftLevel >= 1,
+      },
       { text: '¡Suéltalo! <b>Mini-turbo</b> 🔥<br><small>Chispas azules = nivel 1 · naranjas = nivel 2</small>', max: 3.5, done: () => this.boosted },
       { text: `<kbd>${K.respawn}</kbd> reaparecer · <kbd>${K.pause}</kbd> pausa<br><b>¡A por todas, ${name}!</b>`, max: 2.5 },
     ];
