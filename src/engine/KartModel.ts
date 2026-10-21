@@ -64,8 +64,10 @@ export function buildKartBody(color: string, suit: string, livery: LiveryStyle, 
   // Visera y cuello (el casco va aparte, con textura)
   parts.push(colored(box(0.26, 0.08, 0.1), '#0d1a26', M(0, 1.01, 0.04)));
   parts.push(colored(new THREE.CylinderGeometry(0.1, 0.12, 0.1, 8), carbon, M(0, 0.86, -0.16)));
-  // Volante
-  parts.push(colored(new THREE.TorusGeometry(0.14, 0.025, 4, 10), carbon, M(0, 0.66, 0.24, -1.0)));
+  // Columna de dirección (el volante va aparte para poder girarlo)
+  parts.push(colored(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 5), '#333', M(0, 0.52, 0.36, -1.0)));
+  // Faros traseros/carcasa de la luz de freno
+  parts.push(colored(box(0.36, 0.08, 0.04), '#222', M(0, 0.33, -1.065)));
   // Ejes
   parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5), '#555', M(0, 0.17, -0.62, 0, 0, Math.PI / 2)));
 
@@ -124,6 +126,9 @@ export interface KartMesh {
   flame: THREE.Mesh;
   blob: THREE.Mesh;
   pennant: THREE.Mesh | null;
+  helmet: THREE.Mesh;
+  steering: THREE.Group;
+  brakeMat: THREE.MeshBasicMaterial | null;
   materials: THREE.Material[];
 }
 
@@ -235,6 +240,27 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
       body.add(n);
     }
   }
+  // Volante que gira con la dirección
+  const steering = new THREE.Group();
+  steering.position.set(0, 0.66, 0.24);
+  steering.rotation.x = -1.0;
+  const sw = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.025, 4, 12), wmat);
+  steering.add(sw);
+  const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.03, 0.02), opts.ghost ? mat : new THREE.MeshLambertMaterial({ color: livery === 'ale' ? accent : '#444' }));
+  if (!opts.ghost) mats.push(spoke.material as THREE.Material);
+  steering.add(spoke);
+  body.add(steering);
+  // Luz de freno (se enciende al frenar; brilla con el bloom)
+  let brakeMat: THREE.MeshBasicMaterial | null = null;
+  if (!opts.ghost) {
+    brakeMat = new THREE.MeshBasicMaterial({ color: '#3a0505', toneMapped: false });
+    mats.push(brakeMat);
+    for (const x of [-0.11, 0.11]) {
+      const bl = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.05, 0.02), brakeMat);
+      bl.position.set(x, 0.33, -1.09);
+      body.add(bl);
+    }
+  }
   let pennant: THREE.Mesh | null = null;
   if (livery === 'ale' && !opts.ghost) {
     const pm = new THREE.MeshLambertMaterial({ map: pennantTex(number, accent), transparent: true, side: THREE.DoubleSide, alphaTest: 0.1 });
@@ -287,7 +313,7 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
   blob.position.y = 0.04;
   blob.renderOrder = 1;
   root.add(blob);
-  return { root, body, wheels, frontPivots, flame, blob, pennant, materials: mats };
+  return { root, body, wheels, frontPivots, flame, blob, pennant, helmet, steering, brakeMat, materials: mats };
 }
 
 /** Ondea el banderín de la antena (si lo hay). */

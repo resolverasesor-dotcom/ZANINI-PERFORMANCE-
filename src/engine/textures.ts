@@ -328,3 +328,107 @@ export function disposeTextures(): void {
   for (const t of cache.values()) t.dispose();
   cache.clear();
 }
+
+/** Goma de la trazada: banda oscura con bordes suaves. */
+export function rubberTex(): THREE.Texture {
+  const key = 'rubber';
+  if (cache.has(key)) return cache.get(key)!;
+  const [c, ctx] = canvas(64, 64);
+  const r = rng(12);
+  for (let x = 0; x < 64; x++) {
+    const a = Math.sin((x / 63) * Math.PI) ** 1.6;
+    for (let y = 0; y < 64; y++) {
+      ctx.fillStyle = `rgba(10,10,12,${(a * (0.75 + r() * 0.25)).toFixed(3)})`;
+      ctx.fillRect(x, y, 1, 1);
+    }
+  }
+  return finish(key, c);
+}
+
+/** Malla de valla (rombos) con postes; transparente entre los alambres. */
+export function fenceTex(): THREE.Texture {
+  const key = 'fence';
+  if (cache.has(key)) return cache.get(key)!;
+  const [c, ctx] = canvas(256, 128);
+  ctx.clearRect(0, 0, 256, 128);
+  ctx.strokeStyle = 'rgba(200,205,210,0.9)';
+  ctx.lineWidth = 1.5;
+  for (let x = -128; x < 384; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + 128, 128);
+    ctx.moveTo(x + 128, 0);
+    ctx.lineTo(x, 128);
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#5b5f66';
+  ctx.fillRect(0, 0, 8, 128);
+  ctx.fillRect(0, 0, 256, 5);
+  return finish(key, c);
+}
+
+/** Texto pintado sobre el asfalto. */
+export function paintTex(text: string, sub: string): THREE.Texture {
+  const key = 'paint' + text + sub;
+  if (cache.has(key)) return cache.get(key)!;
+  const [c, ctx] = canvas(512, 160);
+  ctx.clearRect(0, 0, 512, 160);
+  ctx.save();
+  ctx.transform(1, 0, -0.25, 1, 30, 0);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = 'italic 900 96px "Arial Black", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(text, 256, 100);
+  ctx.fillStyle = 'rgba(215,38,30,0.9)';
+  ctx.font = 'italic 900 34px "Arial Black", Arial, sans-serif';
+  ctx.fillText(sub, 256, 145);
+  ctx.restore();
+  return finish(key, c, false);
+}
+
+/** Nube esponjosa (sprite). */
+export function cloudTex(): THREE.Texture {
+  const key = 'cloud';
+  if (cache.has(key)) return cache.get(key)!;
+  const [c, ctx] = canvas(256, 128);
+  const r = rng(99);
+  for (let i = 0; i < 22; i++) {
+    const x = 40 + r() * 176;
+    const y = 50 + r() * 40 - Math.abs(x - 128) * 0.15;
+    const rad = 18 + r() * 30;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.6, 'rgba(255,255,255,0.6)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 128);
+  }
+  return finish(key, c, false);
+}
+
+/** Destellos del sol (lens flare): halo y anillo hexagonal. */
+export function flareTex(kind: 'core' | 'hex'): THREE.Texture {
+  const key = 'flare' + kind;
+  if (cache.has(key)) return cache.get(key)!;
+  const [c, ctx] = canvas(128, 128);
+  if (kind === 'core') {
+    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,255,240,1)');
+    g.addColorStop(0.15, 'rgba(255,240,200,0.8)');
+    g.addColorStop(1, 'rgba(255,200,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      ctx.lineTo(64 + Math.cos(a) * 56, 64 + Math.sin(a) * 56);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  cache.set(key, t);
+  return t;
+}

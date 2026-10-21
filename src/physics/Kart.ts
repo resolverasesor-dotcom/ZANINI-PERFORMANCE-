@@ -108,6 +108,9 @@ export class Kart {
   /** Para sonido/partículas. */
   events: KartEvent[] = [];
   private driftHeld = false;
+  private driftKick = 0;
+  /** Freno de mano activo (botón de derrape pulsado sin entrar en derrape). */
+  handbrake = false;
 
   setPose(track: Track, s: number, lat: number): void {
     const p = { x: 0, y: 0, z: 0 };
@@ -168,6 +171,7 @@ export class Kart {
       this.driftCharge = 0;
       this.driftLevel = 0;
       this.hop = 0.16;
+      this.driftKick = 0.2;
       this.events.push('driftStart');
     }
     if (this.drifting) {
@@ -190,13 +194,22 @@ export class Kart {
       }
     }
 
+    // Freno de mano sin derrape (botón pulsado sin girar lo bastante): frena las
+    // ruedas traseras, la zaga pierde agarre y el kart rota algo más al girar.
+    this.handbrake = inp.drift && !this.drifting && vF0 > 3;
+
     // --- Giro ---
     const wMax = maxYawRate(vF0) * (0.55 + 0.45 * surf.grip);
     let turn: number;
     if (this.drifting) {
       turn = this.driftDir * wMax * KART.driftTurn * (1 + 0.5 * this.steer * this.driftDir);
+      // Golpe de volante al iniciar el derrape: el morro entra en la curva al instante
+      if (this.driftKick > 0) {
+        turn *= 1.45;
+        this.driftKick -= dt;
+      }
     } else {
-      turn = this.steer * wMax * (vF0 < -0.3 ? -1 : 1);
+      turn = this.steer * wMax * (vF0 < -0.3 ? -1 : 1) * (this.handbrake ? 1.3 : 1);
     }
     this.yawRate = damp(this.yawRate, turn, this.drifting ? 7 : 16, dt);
     this.yaw = wrapAngle(this.yaw - this.yawRate * dt);
@@ -235,6 +248,7 @@ export class Kart {
     if (vF > vmaxEff) acc -= (vF - vmaxEff) * 1.6;
     acc -= surf.drag * (Math.abs(vF) / KART.vmax) * sign(vF);
     if (this.drifting) acc -= 0.7;
+    if (this.handbrake) acc -= 7;
     // Pendiente
     const i0 = this.proj.idx;
     const i1 = (i0 + 1) % track.n;
@@ -248,7 +262,7 @@ export class Kart {
     if (brk > 0.05 && vFprev > 0 && vF < 0) vF = 0;
 
     // --- Agarre lateral ---
-    const gripRate = (this.drifting ? KART.driftGrip : KART.grip) * surf.grip;
+    const gripRate = (this.drifting ? KART.driftGrip : this.handbrake ? KART.grip * 0.4 : KART.grip) * surf.grip;
     const newVL = vL * Math.exp(-gripRate * dt);
     const lost = Math.abs(vL) - Math.abs(newVL);
     if (vF > 1) vF += lost * (this.drifting ? 0.72 : 0.45);
@@ -267,7 +281,10 @@ export class Kart {
     this.collideTrack(track, dt);
 
     // Visual
-    this.driftVisual = damp(this.driftVisual, this.drifting ? this.driftDir * 0.42 : 0, 8, dt);
+    // Ángulo visual del chasis: el morro apunta HACIA DENTRO de la curva.
+    // (yaw positivo = giro a la izquierda, por eso el signo negativo)
+    const visTarget = this.drifting ? -this.driftDir * 0.22 : this.handbrake ? -this.steer * 0.12 : 0;
+    this.driftVisual = damp(this.driftVisual, visTarget, 8, dt);
     this.hop = Math.max(0, this.hop - dt);
     this.throttleVisual = damp(this.throttleVisual, thr, 10, dt);
   }

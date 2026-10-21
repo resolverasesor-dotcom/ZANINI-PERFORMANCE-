@@ -255,6 +255,13 @@ export class AudioEngine {
     this.tone(90 + s * 40, 0.18, 'sine', 0.3 + s * 0.4, 0, 45);
   }
 
+  /** Petardeo del escape. */
+  pop(): void {
+    this.noiseBurst(0.07, 0.35, 900);
+    this.tone(70, 0.08, 'square', 0.18, 0, 40);
+    this.noiseBurst(0.05, 0.2, 700, 'lowpass', 0.09);
+  }
+
   lightBeep(): void {
     this.tone(660, 0.22, 'sine', 0.35);
   }

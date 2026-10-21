@@ -149,7 +149,8 @@ export class AIDriver {
       steer = wantYaw / wMax;
     }
     inp.steer = clamp(steer, -1, 1);
-    inp.drift = driftWanted;
+    // Solo pulsar derrape si la física puede entrar en él (si no, actuaría el freno de mano)
+    inp.drift = driftWanted && (k.drifting || Math.abs(inp.steer) > 0.4);
 
     // --- Velocidad ---
     let target = t.sample(t.lineSpeed, s + v * 0.3 + 2) * this.speedFactor * w.rubber;

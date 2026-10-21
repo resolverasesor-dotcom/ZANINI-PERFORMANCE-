@@ -1642,3 +1642,52 @@ table.results {
     transform: translateY(-20px);
   }
 }
+
+/* ---------- Luces de cambio ---------- */
+.hud-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.hud-leds {
+  display: flex;
+  gap: 3px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 6px;
+}
+.hud-leds i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #222;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.hud-leds i.on.g {
+  background: #39e05a;
+  box-shadow: 0 0 6px #39e05a;
+}
+.hud-leds i.on.y {
+  background: #ffc300;
+  box-shadow: 0 0 6px #ffc300;
+}
+.hud-leds i.on.r {
+  background: #ff3b2a;
+  box-shadow: 0 0 6px #ff3b2a;
+}
+.hud-leds.flash i.on {
+  animation: ledflash 0.18s steps(2) infinite;
+}
+@keyframes ledflash {
+  50% {
+    background: #3a8bff;
+    box-shadow: 0 0 8px #3a8bff;
+  }
+}
+@media (max-width: 760px), (max-height: 520px) {
+  .hud-leds i {
+    width: 6px;
+    height: 6px;
+  }
+}

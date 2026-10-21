@@ -17,6 +17,7 @@ import {
   type Settings,
 } from '../core/Settings';
 import { Podium, Showroom } from '../engine/Showroom';
+import { PostFX } from '../engine/PostFX';
 import type { KartLook } from '../engine/KartModel';
 import type { HelmetStyle, LiveryStyle } from '../engine/livery';
 import { getProgress, newUnlocks, UNLOCKS, type Unlockable } from '../race/unlocks';
@@ -112,6 +113,8 @@ export class Game {
       uiRoot: this.ui,
       touch: this.touch,
       touchEnabled: () => this.touchEnabled(),
+      draw: (scene, camera) => this.draw(scene, camera),
+      post: () => this.post,
     };
   }
 
@@ -125,10 +128,35 @@ export class Game {
     const ratio = q === 'alto' ? Math.min(dpr, 2) : q === 'medio' ? Math.min(dpr, 1.5) : Math.min(dpr, 1) * 0.8;
     this.renderer.setPixelRatio(ratio);
     this.renderer.shadowMap.enabled = q !== 'bajo';
+    // Postproducción (bloom, gradación, tone mapping cinematográfico) en media/alta
+    if (q === 'bajo') {
+      this.post?.dispose();
+      this.post = null;
+      this.renderer.toneMapping = THREE.NoToneMapping;
+    } else {
+      if (!this.post || this.postQuality !== q) {
+        this.post?.dispose();
+        this.post = new PostFX(this.renderer, q);
+        this.postQuality = q;
+      }
+      this.renderer.toneMapping = THREE.NeutralToneMapping;
+      this.renderer.toneMappingExposure = 1.05;
+      this.post.setSize(window.innerWidth, window.innerHeight);
+    }
+  }
+
+  private post: PostFX | null = null;
+  private postQuality: string = '';
+
+  /** Dibuja una escena (con postproducción si está activa). */
+  private draw(scene: THREE.Scene, camera: THREE.Camera): void {
+    if (this.post) this.post.render(scene, camera);
+    else this.renderer.render(scene, camera);
   }
 
   private onResize(): void {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.post?.setSize(window.innerWidth, window.innerHeight);
     this.view?.onResize();
   }
 
@@ -156,10 +184,14 @@ export class Game {
     const aspect = window.innerWidth / window.innerHeight;
     if (this.podium) {
       this.podium.update(dt, aspect);
-      this.renderer.render(this.podium.scene, this.podium.camera);
+      this.post?.setLook({ bloom: 0.4, threshold: 1.0 });
+      this.post?.setSpeed(0);
+      this.draw(this.podium.scene, this.podium.camera);
     } else {
       this.showroom.update(dt, aspect, aspect > 1.2 ? 2.2 : 0);
-      this.renderer.render(this.showroom.scene, this.showroom.camera);
+      this.post?.setLook({ bloom: 0.35, threshold: 1.0, vignette: 0.45 });
+      this.post?.setSpeed(0);
+      this.draw(this.showroom.scene, this.showroom.camera);
     }
   }
 

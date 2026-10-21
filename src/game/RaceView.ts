@@ -9,6 +9,7 @@ import { CameraRig } from '../engine/CameraRig';
 import { Effects, SkidMarks } from '../engine/Effects';
 import { buildKart, wavePennant, type KartMesh } from '../engine/KartModel';
 import { skyEnvironment } from '../engine/envmap';
+import type { PostFX } from '../engine/PostFX';
 import { TrackScene } from '../engine/TrackScene';
 import { KART, type KartEvent, type KartInput, emptyInput } from '../physics/Kart';
 import { ghostPose, GhostRecorder, loadGhost, loadRecord, saveGhost, saveRecord, type GhostData } from '../race/Ghost';
@@ -29,6 +30,8 @@ import type { TouchControls } from '../ui/TouchControls';
 
 export interface GameCtx {
   renderer: THREE.WebGLRenderer;
+  draw: (scene: THREE.Scene, camera: THREE.Camera) => void;
+  post: () => PostFX | null;
   input: Input;
   audio: AudioEngine;
   settings: Settings;
@@ -79,6 +82,7 @@ class KartView {
   events: KartEvent[] = [];
   wallImpact = 0;
   kartImpact = 0;
+  prevThrottle = 0;
   private spin = 0;
   constructor(
     readonly comp: Competitor,
@@ -124,6 +128,16 @@ class KartView {
     b.rotation.z = damp(b.rotation.z, roll, 8, dt);
     b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.18 : 0) + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
     for (const p of this.mesh.frontPivots) p.rotation.y = -k.steer * 0.45;
+    // Piloto: volante, cabeza que mira e inclina hacia la curva
+    this.mesh.steering.rotation.z = k.steer * 1.4;
+    const m = this.mesh.helmet;
+    m.rotation.y = damp(m.rotation.y, -k.steer * 0.3 + k.driftVisual * 0.4, 8, dt);
+    m.rotation.z = damp(m.rotation.z, roll * 2.6, 8, dt);
+    // Luz de freno
+    if (this.mesh.brakeMat) {
+      const braking = (this.comp.input.brake > 0.1 && k.vF > 1) || k.handbrake;
+      this.mesh.brakeMat.color.setRGB(braking ? 6 : 0.25, braking ? 0.35 : 0.02, braking ? 0.25 : 0.02);
+    }
     this.spin += (k.vF * dt) / 0.16;
     for (const w of this.mesh.wheels) w.rotation.x = this.spin;
     wavePennant(this.mesh, performance.now() / 1000, Math.abs(k.vF));
@@ -230,6 +244,21 @@ export class RaceView {
       this.replay = new ReplayBuffer(this.views.length, 10);
       this.tv = new TVDirector(this.track);
     }
+    const theme = this.track.def.theme;
+    if (theme === 'night' && this.player) {
+      // De noche, un foco cálido sobre el kart del jugador (y su charco de luz en el asfalto)
+      const pv = this.views.find((v) => v.comp === this.player)!;
+      const lamp = new THREE.PointLight('#ffdcae', 30, 22, 1.6);
+      lamp.position.set(0, 3.2, 1.5);
+      pv.mesh.root.add(lamp);
+    }
+    ctx.post()?.setLook(
+      theme === 'night'
+        ? { bloom: 0.75, threshold: 0.8, vignette: 0.38, sat: 1.12 }
+        : theme === 'sunset'
+          ? { bloom: 0.5, threshold: 0.92, vignette: 0.3, sat: 1.06, tint: '#fff6ee' }
+          : { bloom: 0.38, threshold: 0.98, vignette: 0.3, sat: 1.1 },
+    );
     this.hud = new Hud(ctx.uiRoot);
     this.minimap = new Minimap(this.track, window.innerWidth < 700 ? 110 : 170);
     this.hud.mapSlot.appendChild(this.minimap.canvas);
@@ -458,7 +487,7 @@ export class RaceView {
   }
 
   private render(): void {
-    this.ctx.renderer.render(this.scene, this.rig.camera);
+    this.ctx.draw(this.scene, this.rig.camera);
   }
 
   private updateCamera(dt: number): void {
@@ -530,6 +559,13 @@ export class RaceView {
         const c: [number, number, number] = k.surface === 'grass' ? [0.45, 0.5, 0.3] : k.surface === 'sand' ? [0.9, 0.82, 0.6] : [0.78, 0.7, 0.58];
         this.effects.puff(pos.x - Math.sin(yaw) * 0.9, pos.y, pos.z - Math.cos(yaw) * 0.9, c, 0.8, 0.9, 1.2);
       }
+      // Petardeo al soltar el acelerador a alta velocidad
+      const thr = v.comp.input.throttle;
+      if (v.prevThrottle > 0.8 && thr < 0.2 && k.vF > 17 && Math.random() < 0.8) {
+        this.effects.backfire(pos.x, pos.y, pos.z, v.mesh.root.rotation.y);
+        if (v.comp === this.player || d2 < 20 * 20) this.ctx.audio.pop();
+      }
+      v.prevThrottle = thr;
       if (v.wallImpact > 3) {
         this.effects.impact(pos.x, pos.y, pos.z, v.wallImpact);
         if (d2 < 30 * 30) this.ctx.audio.hit(v.wallImpact * (v.comp === this.player ? 1 : 0.5));
@@ -789,6 +825,7 @@ export class RaceView {
     const ratio = Math.abs(k.vF) / KART.vmax;
     hud.setSpeed(Math.abs(k.vF) * 3.6, ratio, k.boostTime > 0);
     hud.setDrift(k.driftLevel, k.driftCharge, k.drifting);
+    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 + (k.boostTime > 0 ? 0.55 : 0) : 0);
     const sl = this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) + (k.boostTime > 0 ? 0.5 : 0) : 0;
     hud.drawSpeedLines(Math.min(1, sl), k.boostTime > 0);
 

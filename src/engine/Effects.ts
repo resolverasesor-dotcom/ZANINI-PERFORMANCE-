@@ -201,6 +201,19 @@ export class Effects {
     }
   }
 
+  /** Petardeo del escape al levantar el pie: llamarada y humo. */
+  backfire(x: number, y: number, z: number, yaw: number): void {
+    const fx = Math.sin(yaw);
+    const fz = Math.cos(yaw);
+    // escape: 0.34 a la derecha, 1.2 detrás
+    const ex = x - fx * 1.2 - fz * 0.34;
+    const ez = z - fz * 1.2 + fx * 0.34;
+    for (let i = 0; i < 10; i++) {
+      this.sparks.emit(ex, y + 0.34, ez, -fx * (3 + Math.random() * 4) + (Math.random() - 0.5) * 2, Math.random() * 1.5, -fz * (3 + Math.random() * 4) + (Math.random() - 0.5) * 2, 1, 0.45 + Math.random() * 0.3, 0.1, 0.28, 0.12 + Math.random() * 0.1, 1.5, 0);
+    }
+    this.smoke.emit(ex, y + 0.2, ez, -fx * 1.5, 0.6, -fz * 1.5, 0.3, 0.3, 0.32, 0.5, 0.7, 1.2, -0.2);
+  }
+
   update(dt: number): void {
     this.sparks.update(dt);
     this.smoke.update(dt);

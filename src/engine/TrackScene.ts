@@ -7,6 +7,7 @@ import { makeProto } from './decor';
 import { adTex, ADS } from './ads';
 import { crowdMaterial, flagMaterial, Gulls, seaMaterial } from './ambient';
 import { buildLandmark } from './landmarks';
+import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import {
   asphaltTex,
   bannerTex,
@@ -22,6 +23,11 @@ import {
   sandTex,
   wallTex,
   waterTex,
+  rubberTex,
+  paintTex,
+  fenceTex,
+  cloudTex,
+  flareTex,
 } from './textures';
 
 interface ThemeLook {
@@ -44,7 +50,7 @@ export const THEMES: Record<ThemeId, ThemeLook> = {
   mountain: { skyTop: '#4f86c4', skyHorizon: '#e1ebf3', fog: '#c8d7e3', fogNear: 120, fogFar: 650, hemiSky: '#f0f6ff', hemiGround: '#4a5e40', hemi: 1.5, sun: '#fff7e8', sunI: 2.4, sunDir: [0.3, 1, -0.5] },
   night: { skyTop: '#03050c', skyHorizon: '#1c2440', fog: '#0c1124', fogNear: 60, fogFar: 420, hemiSky: '#7c8fd0', hemiGround: '#1a1a28', hemi: 0.9, sun: '#9fb0ff', sunI: 0.5, sunDir: [0.3, 1, 0.2] },
   quarry: { skyTop: '#6aa6dc', skyHorizon: '#f6e2bf', fog: '#ecd8b4', fogNear: 150, fogFar: 750, hemiSky: '#fff8ea', hemiGround: '#9c7c52', hemi: 1.6, sun: '#ffe4b8', sunI: 2.7, sunDir: [-0.5, 1, -0.3] },
-  sunset: { skyTop: '#3a2d72', skyHorizon: '#ff9e63', fog: '#f0a27c', fogNear: 160, fogFar: 760, hemiSky: '#ffd8b8', hemiGround: '#6e5544', hemi: 1.4, sun: '#ffb070', sunI: 2.5, sunDir: [-0.7, 0.35, 0.6] },
+  sunset: { skyTop: '#4a3a86', skyHorizon: '#ffb07a', fog: '#f0b08c', fogNear: 170, fogFar: 780, hemiSky: '#ffe2c8', hemiGround: '#7a6450', hemi: 2.1, sun: '#ffc08a', sunI: 3.0, sunDir: [-0.7, 0.45, 0.6] },
   gp: { skyTop: '#3e74c8', skyHorizon: '#ffd9ab', fog: '#f4dcc0', fogNear: 170, fogFar: 850, hemiSky: '#fff1e0', hemiGround: '#5f6f42', hemi: 1.5, sun: '#ffd49c', sunI: 2.8, sunDir: [0.8, 0.7, 0.2] },
 };
 
@@ -117,6 +123,8 @@ export class TrackScene {
     this.buildBackdrop();
     this.buildLandmarks();
     this.buildFlags();
+    this.buildDetails();
+    this.buildSkyLife(scene);
   }
 
   // ---------- utilidades ----------
@@ -175,7 +183,9 @@ export class TrackScene {
       uniforms: { top: { value: new THREE.Color(this.look.skyTop) }, horizon: { value: new THREE.Color(this.look.skyHorizon) } },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader:
-        'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = clamp(normalize(vP).y, 0.0, 1.0); gl_FragColor = vec4(mix(horizon, top, pow(h, 0.6)), 1.0); }',
+        // El degradado se diseña "en pantalla"; se pasa a lineal para que la conversión
+        // final (directa o tras la postproducción) devuelva exactamente esos tonos.
+        'uniform vec3 top; uniform vec3 horizon; varying vec3 vP; void main(){ float h = clamp(normalize(vP).y, 0.0, 1.0); vec3 c = mix(horizon, top, pow(h, 0.6)); gl_FragColor = vec4(pow(c, vec3(2.2)), 1.0);\n#include <colorspace_fragment>\n}',
     });
     this.mat(mat);
     const m = new THREE.Mesh(geo, mat);
@@ -382,6 +392,125 @@ export class TrackScene {
       if (o.update) this.landmarkUpdates.push(o.update);
     }
   }
+
+  /** Detalle de pista: goma de la trazada, pintura en el asfalto, publicidad en las escapatorias y vallas. */
+  private buildDetails(): void {
+    const t = this.track;
+    const theme = t.def.theme;
+    // Goma de la trazada (más oscura donde se frena y gira)
+    const rubber = this.mat(
+      new THREE.MeshBasicMaterial({ map: rubberTex(), transparent: true, opacity: theme === 'night' ? 0.3 : 0.38, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1 }),
+    );
+    const m = this.ribbon((i) => t.lineOffset[i] - 1.5, (i) => t.lineOffset[i] + 1.5, 0.035, rubber, { vScale: 6, receive: false });
+    if (m) m.renderOrder = 1;
+
+    // Logo pintado en la recta de meta
+    const paint = this.mat(new THREE.MeshBasicMaterial({ map: paintTex('ZANINI', 'PERFORMANCE'), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }));
+    const hw = t.hw[t.index(14)];
+    const logo = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(hw * 1.6, hw * 0.5)), paint);
+    const lp = { x: 0, y: 0, z: 0 };
+    t.pointAt(16, 0, lp);
+    logo.position.set(lp.x, lp.y + 0.05, lp.z);
+    // texto legible al acercarse: la parte superior del texto mira hacia delante
+    logo.rotation.set(-Math.PI / 2, 0, 0);
+    logo.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), t.headingAt(16) + Math.PI);
+    logo.renderOrder = 2;
+    this.group.add(logo);
+
+    // Publicidad pintada sobre las escapatorias amplias, por fuera de las curvas
+    const r = rng(t.def.id.length * 3 + 11);
+    let placed = 0;
+    for (let i = 0; i < t.n && placed < 8; i += 4) {
+      const k = t.curv[i];
+      if (Math.abs(k) < 1 / 40) continue;
+      const outside = k > 0 ? -1 : 1;
+      const run = outside < 0 ? t.runL[i] : t.runR[i];
+      if (run < 6) continue;
+      const s = i * t.ds;
+      const lat = outside * (t.hw[i] + run * 0.55 + 0.6);
+      t.pointAt(s, lat, lp);
+      const ad = new THREE.Mesh(
+        this.geo(new THREE.PlaneGeometry(Math.min(9, run * 1.4), Math.min(9, run * 1.4) / 4)),
+        this.mat(new THREE.MeshLambertMaterial({ map: adTex(Math.floor(r() * ADS.length)), transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })),
+      );
+      ad.position.set(lp.x, lp.y + 0.03, lp.z);
+      ad.rotation.set(-Math.PI / 2, 0, 0);
+      ad.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), t.headingAt(s) + (outside > 0 ? -Math.PI / 2 : Math.PI / 2));
+      ad.renderOrder = 1;
+      ad.receiveShadow = true;
+      this.group.add(ad);
+      placed++;
+      i += 90; // separar los anuncios
+    }
+
+    // Vallas de malla sobre los muros (no en montaña ni cantera: guardarraíl)
+    if (theme !== 'mountain' && theme !== 'quarry') {
+      const tex = fenceTex().clone();
+      tex.needsUpdate = true;
+      tex.repeat.set(1, 1);
+      this.disposables.push(tex);
+      const fm = this.mat(new THREE.MeshLambertMaterial({ map: tex, transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, depthWrite: true }));
+      const wh = theme === 'night' ? 1.5 : 1.1;
+      const y0 = (i: number) => t.py[i] + wh;
+      const y1 = (i: number) => t.py[i] + wh + 2.6;
+      const straight = (i: number) => !t.bridge[i];
+      this.wallStrip((i) => -(t.hw[i] + t.runL[i]), y0, y1, fm, straight, 4);
+      this.wallStrip((i) => t.hw[i] + t.runR[i], y0, y1, fm, straight, 4);
+    }
+  }
+
+  /** Nubes y destello del sol. */
+  private buildSkyLife(scene: THREE.Scene): void {
+    const theme = this.track.def.theme;
+    const b = this.track.bounds;
+    const cx = (b.minX + b.maxX) / 2;
+    const cz = (b.minZ + b.maxZ) / 2;
+    if (theme !== 'night') {
+      const r = rng(31);
+      const n = this.quality === 'bajo' ? 10 : 26;
+      const clouds = new THREE.Group();
+      const tint = theme === 'sunset' ? '#ffc2a0' : theme === 'gp' ? '#ffe6cc' : '#ffffff';
+      for (let i = 0; i < n; i++) {
+        const sm = this.mat(new THREE.SpriteMaterial({ map: cloudTex(), color: tint, transparent: true, depthWrite: false, fog: false, opacity: 0.75 + r() * 0.25 }));
+        const sp = new THREE.Sprite(sm);
+        const a = r() * Math.PI * 2;
+        const d = 700 + r() * 600;
+        sp.position.set(cx + Math.cos(a) * d, 160 + r() * 160, cz + Math.sin(a) * d);
+        const w = 220 + r() * 260;
+        sp.scale.set(w, w * 0.45, 1);
+        clouds.add(sp);
+      }
+      this.clouds = clouds;
+      this.group.add(clouds);
+      // Destello del sol
+      if (this.quality !== 'bajo') {
+        const lf = new Lensflare();
+        lf.addElement(new LensflareElement(flareTex('core'), 420, 0, new THREE.Color(this.look.sun)));
+        lf.addElement(new LensflareElement(flareTex('hex'), 60, 0.35, new THREE.Color('#ffd27a')));
+        lf.addElement(new LensflareElement(flareTex('hex'), 90, 0.6, new THREE.Color('#ff8a5a')));
+        lf.addElement(new LensflareElement(flareTex('hex'), 50, 0.85, new THREE.Color('#9fd0ff')));
+        const d = new THREE.Vector3(...this.look.sunDir).normalize();
+        lf.position.set(cx + d.x * 1300, d.y * 1300, cz + d.z * 1300);
+        lf.frustumCulled = false;
+        this.group.add(lf);
+        this.lensflare = lf;
+      }
+    } else {
+      // Luna
+      const moon = new THREE.Mesh(this.geo(new THREE.CircleGeometry(40, 32)), this.mat(new THREE.MeshBasicMaterial({ color: '#fff6dc', fog: false })));
+      moon.position.set(cx + 600, 420, cz - 900);
+      moon.lookAt(cx, 0, cz);
+      this.group.add(moon);
+      const halo = new THREE.Sprite(this.mat(new THREE.SpriteMaterial({ map: glowTex(), color: '#9fb6ff', transparent: true, opacity: 0.6, depthWrite: false, fog: false })));
+      halo.position.copy(moon.position);
+      halo.scale.set(260, 260, 1);
+      this.group.add(halo);
+    }
+    void scene;
+  }
+
+  private clouds: THREE.Group | null = null;
+  private lensflare: Lensflare | null = null;
 
   /** Banderas a ambos lados de la recta de meta. */
   private buildFlags(): void {
@@ -790,7 +919,7 @@ export class TrackScene {
         new THREE.SpriteMaterial({ map: glowTex(), color: night ? '#ffd890' : '#fff6d8', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: night ? 0.95 : 0.0 }),
       );
       const poolMat = this.mat(
-        new THREE.MeshBasicMaterial({ map: glowTex(), color: '#ffc870', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.32 }),
+        new THREE.MeshBasicMaterial({ map: glowTex(), color: '#ffc870', transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.16 }),
       );
       const headMat = this.mat(new THREE.MeshBasicMaterial({ color: night ? '#fff2c8' : '#d9d9d9' }));
       const headGeo = this.geo(new THREE.BoxGeometry(0.5, 0.18, 0.7));
@@ -888,6 +1017,7 @@ export class TrackScene {
       (f.mesh.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(t * 0.9 + 1.2));
     }
     this.gulls?.update(t);
+    if (this.clouds) this.clouds.rotation.y = t * 0.002;
     for (const u of this.landmarkUpdates) u(t);
   }
 
@@ -896,6 +1026,7 @@ export class TrackScene {
     this.group.traverse((o) => {
       if (o instanceof THREE.InstancedMesh) o.dispose();
     });
+    this.lensflare?.dispose();
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
   }

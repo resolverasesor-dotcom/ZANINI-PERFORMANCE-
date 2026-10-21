@@ -23,6 +23,8 @@ export class Hud {
   private speedEl: HTMLDivElement;
   private gauge: HTMLDivElement;
   private driftEl: HTMLDivElement;
+  private leds!: HTMLDivElement;
+  private ledsLit = -1;
   private tower: HTMLDivElement;
   private towerRows: HTMLDivElement[] = [];
   private msg: HTMLDivElement;
@@ -74,7 +76,11 @@ export class Hud {
     const unit = el('div', 'hud-unit', 'km/h');
     this.driftEl = el('div', 'hud-drift');
     this.gauge.append(this.speedEl, unit);
-    br.append(this.driftEl, this.gauge);
+    const gaugeWrap = el('div', 'hud-gauge-wrap');
+    this.leds = el('div', 'hud-leds');
+    for (let i = 0; i < 10; i++) this.leds.appendChild(el('i', i < 4 ? 'g' : i < 7 ? 'y' : 'r'));
+    gaugeWrap.append(this.leds, this.gauge);
+    br.append(this.driftEl, gaugeWrap);
     this.root.appendChild(br);
 
     this.mapSlot = el('div', 'hud-map');
@@ -156,6 +162,12 @@ export class Hud {
     const deg = Math.min(1, ratio) * 270;
     this.gauge.style.setProperty('--deg', `${deg}deg`);
     this.gauge.classList.toggle('boost', boost);
+    const lit = boost ? 10 : Math.max(0, Math.min(10, Math.round(((ratio - 0.3) / 0.68) * 10)));
+    if (lit !== this.ledsLit) {
+      this.ledsLit = lit;
+      Array.from(this.leds.children).forEach((c, i) => c.classList.toggle('on', i < lit));
+    }
+    this.leds.classList.toggle('flash', boost || ratio > 0.97);
   }
 
   setDrift(level: number, charge: number, drifting: boolean): void {

@@ -45,6 +45,7 @@ Reglas:
 
 Consejos para ir rápido:
 
+- El botón de derrape sin girar actúa como **freno de mano** (frena la zaga y la hace deslizar).
 - **Derrapa** en las curvas: mantén el botón de derrape mientras giras. Las chispas pasan de
   blanco a **azul** (mini-turbo nivel 1) y a **naranja** (nivel 2). Suelta para salir disparada/o.
   Girar hacia dentro del derrape lo carga más rápido.
@@ -81,7 +82,7 @@ mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapand
 | Acelerar | ↑ / W | RT o A | ACEL |
 | Frenar / marcha atrás | ↓ / S | LT o X | FRENO |
 | Girar | ← → / A D | Stick izquierdo o cruceta | ◀ ▶ |
-| Derrapar | Espacio / Mayús | RB, LB o B | DERRAPE |
+| Derrapar / freno de mano | Espacio / Mayús | RB, LB o B | DERRAPE |
 | Reaparecer | R | Y | ↺ |
 | Cambiar cámara | C | Select | (en pausa) |
 | Pausa | Esc / P | Start | ❚❚ |
