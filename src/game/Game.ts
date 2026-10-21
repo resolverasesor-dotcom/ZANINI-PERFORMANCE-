@@ -17,6 +17,8 @@ import {
   type Settings,
 } from '../core/Settings';
 import { Podium, Showroom } from '../engine/Showroom';
+import type { KartLook } from '../engine/KartModel';
+import type { HelmetStyle } from '../engine/livery';
 import {
   applyRace,
   clearChampionship,
@@ -61,7 +63,7 @@ export class Game {
   private screen: HTMLDivElement;
   private touch: TouchControls;
   private view: RaceView | null = null;
-  private showroom = new Showroom();
+  private showroom: Showroom;
   private podium: Podium | null = null;
   private last = performance.now();
   private booted = false;
@@ -87,7 +89,8 @@ export class Game {
     this.touch = new TouchControls(this.ui, this.input);
     this.touch.show(false);
     this.audio.setVolumes(this.settings.volume, this.settings.sfx, this.settings.musicVolume, this.settings.music);
-    this.showroom.setKart(this.profile.color, this.profile.number);
+    this.showroom = new Showroom(this.renderer, this.settings.quality);
+    this.showroom.setKart(this.playerLook());
     window.addEventListener('resize', () => this.onResize());
     this.onResize();
     this.showBoot();
@@ -374,14 +377,23 @@ export class Game {
   }
 
   // ---------------- participantes ----------------
+  private playerLook(): KartLook {
+    const p = this.profile;
+    return { color: p.color, number: p.number, livery: p.livery, helmet: p.helmet, name: p.name };
+  }
+
   private playerEntrant(): Entrant {
     const p = this.profile;
-    return { id: 'player', name: p.name, short: p.name.slice(0, 3).toUpperCase(), nat: 'ESP', number: p.number, color: p.color, isPlayer: true, driver: null };
+    return { id: 'player', name: p.name, short: p.name.slice(0, 3).toUpperCase(), nat: 'ESP', number: p.number, color: p.color, isPlayer: true, driver: null, look: this.playerLook() };
   }
 
   private aiEntrant(d: DriverDef): Entrant {
     const clash = d.number === this.profile.number;
-    return { id: d.id, name: d.name, short: d.short, nat: d.nat, number: clash ? d.number + 70 : d.number, color: d.color, isPlayer: false, driver: d };
+    const idx = DRIVERS.indexOf(d);
+    const number = clash ? d.number + 70 : d.number;
+    const helmets: HelmetStyle[] = ['clasico', 'rayo', 'estrellas', 'llamas'];
+    const look: KartLook = { color: d.color, number, sponsor: idx, helmet: helmets[idx % helmets.length], livery: 'basica' };
+    return { id: d.id, name: d.name, short: d.short, nat: d.nat, number, color: d.color, isPlayer: false, driver: d, look };
   }
 
   private allEntrants(): Entrant[] {
@@ -715,7 +727,7 @@ export class Game {
       ents.map((e) => e.id),
     );
     const top = st.slice(0, 3).map((r) => ents.find((e) => e.id === r.id)!);
-    this.podium = new Podium(top.map((e) => ({ color: e.color, number: e.number })));
+    this.podium = new Podium(top.map((e) => e.look ?? { color: e.color, number: e.number }), this.renderer);
     const champ = top[0];
     const myPos = st.findIndex((r) => r.id === 'player') + 1;
     if (champ.isPlayer) {
@@ -792,7 +804,7 @@ export class Game {
         },
         'menu',
       );
-      this.showroom.setKart(p.color, p.number);
+      this.showroom.setKart(this.playerLook());
     };
     render();
   }
@@ -804,7 +816,7 @@ export class Game {
       if (name) this.profile.name = name;
     }
     saveProfile(this.profile);
-    this.showroom.setKart(this.profile.color, this.profile.number);
+    this.showroom.setKart(this.playerLook());
   }
 
   // ---------------- ajustes ----------------

@@ -1,5 +1,6 @@
 import type { Difficulty } from '../ai/Drivers';
 import { load, save } from './Storage';
+import type { HelmetStyle, LiveryStyle } from '../engine/livery';
 
 export type Quality = 'bajo' | 'medio' | 'alto';
 export type CameraMode = 'trasera' | 'cercana' | 'capo';
@@ -50,6 +51,9 @@ export interface Profile {
   name: string;
   number: number;
   color: string;
+  /** Decoración del kart (ver engine/livery.ts). */
+  livery: LiveryStyle;
+  helmet: HelmetStyle;
 }
 
 function isMobile(): boolean {
@@ -88,7 +92,7 @@ export function saveSettings(s: Settings): void {
 }
 
 export function loadProfile(): Profile {
-  return { name: 'ALE', number: 7, color: '#D7261E', ...load<Partial<Profile>>('profile', {}) };
+  return { name: 'ALE', number: 7, color: '#D7261E', livery: 'ale', helmet: 'estrellas', ...load<Partial<Profile>>('profile', {}) };
 }
 
 export function saveProfile(p: Profile): void {

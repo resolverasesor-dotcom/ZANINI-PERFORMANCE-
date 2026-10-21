@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { DecorType } from '../track/TrackData';
-import { bannerTex, windowsTex } from './textures';
+import { windowsTex } from './textures';
+import { adTex } from './ads';
 
 // Prototipos low-poly de la decoración (se dibujan con InstancedMesh).
 
@@ -116,9 +117,9 @@ export function makeProto(type: DecorType, theme: string, variant = 0): DecorPro
       return { geo: mergeGeometries(parts)!, mat: vc(), shadow: false, onTrack: true };
     }
     case 'banner': {
-      const geo = new THREE.PlaneGeometry(6, 1.1);
-      geo.translate(0, 1.0, 0);
-      const mat = new THREE.MeshLambertMaterial({ map: bannerTex(variant), side: THREE.DoubleSide });
+      const geo = new THREE.PlaneGeometry(6, 1.5);
+      geo.translate(0, 1.2, 0);
+      const mat = new THREE.MeshLambertMaterial({ map: adTex(variant), side: THREE.DoubleSide });
       return { geo, mat, shadow: false, onTrack: true };
     }
     case 'cone': {

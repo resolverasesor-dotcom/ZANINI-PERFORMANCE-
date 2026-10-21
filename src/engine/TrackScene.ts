@@ -4,6 +4,7 @@ import type { Quality } from '../core/Settings';
 import { KERB_WIDTH, type Track } from '../track/Track';
 import type { DecorType, ThemeId } from '../track/TrackData';
 import { makeProto } from './decor';
+import { adTex, ADS } from './ads';
 import {
   asphaltTex,
   bannerTex,
@@ -369,6 +370,7 @@ export class TrackScene {
     const yt = (i: number) => t.py[i] + wh;
     this.wallStrip((i) => -(t.hw[i] + t.runL[i]), yb, yt, wallMat, undefined, 6);
     this.wallStrip((i) => t.hw[i] + t.runR[i], yb, yt, wallMat, undefined, 6, -1);
+    this.buildWallAds(wh);
     // Terraplenes bajo tramos elevados y puentes
     const raised = (i: number) => t.py[i] - this.groundY > 0.25 && !t.bridge[i];
     if (t.bounds.maxY - t.bounds.minY > 0.5) {
@@ -448,7 +450,7 @@ export class TrackScene {
     bannerBack.position.set(0, 7.4, 0);
     g.add(bannerBack);
     for (const face of [-1, 1]) {
-      const bt = this.mat(new THREE.MeshBasicMaterial({ map: bannerTex(face > 0 ? 0 : 1) }));
+      const bt = this.mat(new THREE.MeshBasicMaterial({ map: face < 0 ? bannerTex(0) : adTex(t.def.id.length) }));
       const banner = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(span * 1.6, 1.0)), bt);
       banner.position.set(0, 7.4, face * 0.07);
       banner.rotation.y = face < 0 ? Math.PI : 0;
@@ -465,6 +467,45 @@ export class TrackScene {
       }
     }
     this.group.add(g);
+  }
+
+  /** Vallas publicitarias pegadas a la cara interior de los muros. */
+  private buildWallAds(wallH: number): void {
+    const t = this.track;
+    const L = t.length;
+    const r = rng(t.def.id.length * 17 + 3);
+    const groups = new Map<number, THREE.Matrix4[]>();
+    const step = this.quality === 'bajo' ? 70 : 42;
+    const h = Math.min(0.9, wallH - 0.2);
+    let k = 0;
+    for (let s = 25; s < L - 15; s += step) {
+      const side = k++ % 2 === 0 ? 1 : -1;
+      const i = t.index(s);
+      if (t.bridge[i]) continue;
+      const lim = t.hw[i] + (side > 0 ? t.runR[i] : t.runL[i]);
+      // solo en tramos rectos (las vallas planas no siguen la curva)
+      if (Math.abs(t.curv[i]) > 1 / 60) continue;
+      const p = { x: 0, y: 0, z: 0 };
+      t.pointAt(s, side * (lim - 0.06), p);
+      const nx = side * t.tz[i];
+      const nz = -side * t.tx[i];
+      const m = new THREE.Matrix4().compose(
+        new THREE.Vector3(p.x, p.y + 0.1 + h / 2, p.z),
+        new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(nx, nz)),
+        new THREE.Vector3(1, 1, 1),
+      );
+      const ad = Math.floor(r() * ADS.length);
+      let arr = groups.get(ad);
+      if (!arr) groups.set(ad, (arr = []));
+      arr.push(m);
+    }
+    const geo = this.geo(new THREE.PlaneGeometry(h * 4, h));
+    for (const [ad, mats] of groups) {
+      const mesh = new THREE.InstancedMesh(geo, this.mat(new THREE.MeshLambertMaterial({ map: adTex(ad) })), mats.length);
+      mats.forEach((m, j) => mesh.setMatrixAt(j, m));
+      mesh.receiveShadow = true;
+      this.group.add(mesh);
+    }
   }
 
   /** n luces rojas encendidas; green=true para el verde de entrenamientos. */
@@ -573,7 +614,7 @@ export class TrackScene {
           const dz = -side * t.tx[k];
           const yaw = Math.atan2(dx, dz);
           const free = rule.type === 'tree' || rule.type === 'pine' || rule.type === 'rock' || rule.type === 'palm' || rule.type === 'crate';
-          const variant = rule.type === 'building' ? Math.floor(r() * 3) : rule.type === 'banner' ? Math.floor(r() * 4) : 0;
+          const variant = rule.type === 'building' ? Math.floor(r() * 3) : rule.type === 'banner' ? Math.floor(r() * ADS.length) : 0;
           push(`${rule.type}:${variant}`, { x: p.x, y: p.y, z: p.z, yaw: free ? r() * Math.PI * 2 : yaw, s });
           if (rule.type === 'lamp') {
             const hp = { x: 0, y: 0, z: 0 };

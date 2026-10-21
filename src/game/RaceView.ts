@@ -7,7 +7,8 @@ import type { CameraMode, Profile, Settings } from '../core/Settings';
 import { saveSettings } from '../core/Settings';
 import { CameraRig } from '../engine/CameraRig';
 import { Effects } from '../engine/Effects';
-import { buildKart, type KartMesh } from '../engine/KartModel';
+import { buildKart, wavePennant, type KartMesh } from '../engine/KartModel';
+import { skyEnvironment } from '../engine/envmap';
 import { TrackScene } from '../engine/TrackScene';
 import { KART, type KartInput, emptyInput } from '../physics/Kart';
 import { ghostPose, GhostRecorder, loadGhost, loadRecord, saveGhost, saveRecord, type GhostData } from '../race/Ghost';
@@ -64,8 +65,9 @@ class KartView {
   constructor(
     readonly comp: Competitor,
     scene: THREE.Scene,
+    reflective: boolean,
   ) {
-    this.mesh = buildKart(comp.e.color, comp.e.number);
+    this.mesh = buildKart(comp.e.color, comp.e.number, { ...(comp.e.look ?? {}), reflective });
     this.mesh.root.rotation.order = 'YXZ';
     scene.add(this.mesh.root);
   }
@@ -91,6 +93,7 @@ class KartView {
     for (const p of this.mesh.frontPivots) p.rotation.y = -k.steer * 0.45;
     this.spin += (k.vF * dt) / 0.16;
     for (const w of this.mesh.wheels) w.rotation.x = this.spin;
+    wavePennant(this.mesh, performance.now() / 1000, Math.abs(k.vF));
     const fl = this.mesh.flame;
     fl.visible = k.boostTime > 0;
     if (fl.visible) {
@@ -162,7 +165,12 @@ export class RaceView {
     this.rig.mode = ctx.settings.camera;
     this.effects = new Effects(quality === 'bajo');
     this.scene.add(this.effects.group);
-    for (const c of this.sim.comps) this.views.push(new KartView(c, this.scene));
+    for (const c of this.sim.comps) this.views.push(new KartView(c, this.scene, quality !== 'bajo'));
+    // Reflejos: entorno generado a partir del cielo del circuito
+    if (quality !== 'bajo') {
+      const lk = this.trackScene.look;
+      this.scene.environment = skyEnvironment(ctx.renderer, lk.skyTop, lk.skyHorizon, lk.hemiGround, lk.sun, lk.sunDir);
+    }
 
     // Fantasma
     if (ctx.settings.ghost && (setup.kind === 'practice' || setup.kind === 'timetrial')) {

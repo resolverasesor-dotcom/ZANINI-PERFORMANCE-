@@ -3,6 +3,7 @@ import { paceFactor, type Difficulty, type DriverDef } from '../ai/Drivers';
 import { clamp, damp, rng } from '../core/math';
 import { collideKarts, emptyInput, Kart, KART, type KartInput } from '../physics/Kart';
 import { KERB_WIDTH, type Track } from '../track/Track';
+import type { KartLook } from '../engine/KartModel';
 
 export type SessionKind = 'practice' | 'timetrial' | 'quali' | 'race';
 
@@ -15,6 +16,8 @@ export interface Entrant {
   color: string;
   isPlayer: boolean;
   driver: DriverDef | null;
+  /** Decoración del kart (solo visual). */
+  look?: KartLook;
 }
 
 export interface SimConfig {
