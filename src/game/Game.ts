@@ -236,11 +236,18 @@ export class Game {
       `<div class="main-menu">
         ${logoHTML('small')}
         <div class="menu-col">
+          ${
+            !tro.tutorial && !tro.tutorialDismissed
+              ? `<div class="first-run"><b>¿Primera vez?</b> Aprende a derrapar en 20 segundos.
+                  <div><button class="btn primary sm" data-act="tutorial">🎓 Tutorial</button> <button class="btn sm" data-act="notut">Ahora no</button></div></div>`
+              : ''
+          }
           ${champ ? `<button class="btn primary" data-act="continue">▶ Continuar campeonato · GP ${Math.min(6, champ.round + 1)}/6</button>` : ''}
           ${modes}
-          <div class="row2">
+          <div class="row3">
             <button class="btn" data-act="profile">👤 Perfil</button>
             <button class="btn" data-act="settings">⚙ Ajustes</button>
+            <button class="btn" data-act="tutorial">🎓 Tutorial</button>
           </div>
           ${isMobile() && document.fullscreenEnabled ? `<button class="btn" data-act="fullscreen">⛶ Pantalla completa</button>` : ''}
         </div>
@@ -253,6 +260,13 @@ export class Game {
         mode: (b) => this.onMode(b.dataset.mode as Mode),
         continue: () => this.champHub(),
         profile: () => this.showProfile(),
+        tutorial: () => this.startTutorial(),
+        notut: () => {
+          const t = loadTrophies();
+          t.tutorialDismissed = true;
+          saveTrophies(t);
+          this.showMain();
+        },
         settings: () => this.showSettings(() => this.showMain()),
         fullscreen: () => void document.documentElement.requestFullscreen?.().catch(() => undefined),
       },
@@ -451,6 +465,29 @@ export class Game {
       });
       loading.remove();
     }, 60);
+  }
+
+  private startTutorial(): void {
+    this.runSession(
+      {
+        kind: 'practice',
+        trackId: 'zanini-ring',
+        laps: 0,
+        difficulty: this.settings.difficulty,
+        entrants: [this.playerEntrant()],
+        duration: 0,
+        label: 'Tutorial',
+        mode: 'practice',
+        canEndSession: false,
+        tutorial: true,
+      },
+      () => {
+        const t = loadTrophies();
+        t.tutorial = true;
+        saveTrophies(t);
+        this.showMain();
+      },
+    );
   }
 
   private startSimple(mode: 'practice' | 'timetrial', trackId: string): void {

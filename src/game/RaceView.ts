@@ -10,7 +10,7 @@ import { Effects, SkidMarks } from '../engine/Effects';
 import { buildKart, wavePennant, type KartMesh } from '../engine/KartModel';
 import { skyEnvironment } from '../engine/envmap';
 import { TrackScene } from '../engine/TrackScene';
-import { KART, type KartInput, emptyInput } from '../physics/Kart';
+import { KART, type KartEvent, type KartInput, emptyInput } from '../physics/Kart';
 import { ghostPose, GhostRecorder, loadGhost, loadRecord, saveGhost, saveRecord, type GhostData } from '../race/Ghost';
 import { RaceSim, type Competitor, type Entrant, type RaceResultRow, type SessionKind, type SimEvent } from '../race/RaceSim';
 import { getRefLap, getTrack } from '../track/trackCache';
@@ -20,6 +20,7 @@ import { DEBUG } from '../core/debug';
 import { el } from '../ui/dom';
 import { Hud, type TowerRow } from '../ui/Hud';
 import { Minimap } from '../ui/Minimap';
+import { Tutorial } from '../ui/Tutorial';
 import { navigate } from '../ui/nav';
 import type { TouchControls } from '../ui/TouchControls';
 
@@ -48,6 +49,8 @@ export interface SessionSetup {
   mode: 'practice' | 'timetrial' | 'quick' | 'weekend' | 'championship';
   /** Permite terminar la sesión desde pausa (fin de semana / campeonato). */
   canEndSession: boolean;
+  /** Sesión de tutorial (libres guiados de 20 s). */
+  tutorial?: boolean;
 }
 
 export type SessionOutcome =
@@ -61,6 +64,10 @@ const STEP = 1 / 120;
 
 class KartView {
   readonly mesh: KartMesh;
+  /** Eventos e impactos acumulados durante el frame (puede haber varios pasos de física). */
+  events: KartEvent[] = [];
+  wallImpact = 0;
+  kartImpact = 0;
   private spin = 0;
   constructor(
     readonly comp: Competitor,
@@ -112,6 +119,8 @@ export class RaceView {
   private rig: CameraRig;
   private views: KartView[] = [];
   private effects: Effects;
+  private tutorial: Tutorial | null = null;
+  private tutorialEnd = 0;
   private skids: SkidMarks;
   private hud: Hud;
   private minimap: Minimap;
@@ -200,7 +209,10 @@ export class RaceView {
     });
     ctx.uiRoot.appendChild(this.endPrompt);
 
-    if (setup.kind === 'race') {
+    if (setup.tutorial && this.sim.player) {
+      this.trackScene.setStartLights(0, true);
+      this.tutorial = new Tutorial(ctx.uiRoot, this.sim.player.kart, ctx.input, ctx.settings, () => this.finish({ kind: 'practice', best: null }), ctx.profile.name.charAt(0) + ctx.profile.name.slice(1).toLowerCase());
+    } else if (setup.kind === 'race') {
       this.trackScene.setStartLights(0);
       this.hud.message(this.setup.label.toUpperCase(), 'title', 3);
     } else {
@@ -332,6 +344,13 @@ export class RaceView {
     while (this.acc >= STEP) {
       this.sim.step(STEP, pi, this.respawnReq);
       this.respawnReq = false;
+      // Acumular eventos e impactos de todos los pasos de este frame
+      for (const v of this.views) {
+        const k = v.comp.kart;
+        for (const e of k.events) v.events.push(e);
+        v.wallImpact = Math.max(v.wallImpact, k.wallImpact);
+        v.kartImpact = Math.max(v.kartImpact, k.kartImpact);
+      }
       if (player && player.lapsDone > 0) {
         const k = player.kart;
         this.ghostRec.sample(STEP, k.x, k.y, k.z, k.yaw);
@@ -342,10 +361,27 @@ export class RaceView {
     }
     const alpha = this.acc / STEP;
     this.visualTime += dt;
+    if (this.tutorial) {
+      const pv = this.views.find((v) => v.comp === player);
+      if (pv?.events.some((e) => e === 'boost1' || e === 'boost2')) this.tutorial.boost();
+      this.tutorial.update(dt, pi.steer);
+      if (this.tutorial.finished) {
+        this.tutorialEnd += dt;
+        if (this.tutorialEnd > 1.4) {
+          this.finish({ kind: 'practice', best: null });
+          return;
+        }
+      }
+    }
 
     for (const v of this.views) v.update(alpha, dt, this.track);
     this.updateEffects(dt);
     this.updateCamera(dt);
+    for (const v of this.views) {
+      v.events.length = 0;
+      v.wallImpact = 0;
+      v.kartImpact = 0;
+    }
     // Un kart pegado a la cámara taparía la vista: se oculta.
     const cp = this.rig.camera.position;
     for (const v of this.views) {
@@ -375,12 +411,12 @@ export class RaceView {
     const slope = (this.track.py[(i0 + 3) % this.track.n] - this.track.py[i0]) / (3 * this.track.ds);
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;
     this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y + k.driftVisual * 0.5, velYaw, sp / KART.vmax, k.boostTime > 0, slope * along);
-    if (k.wallImpact > 2) {
-      this.rig.addShake(Math.min(1, k.wallImpact / 10));
-      this.ctx.input.rumble(Math.min(1, k.wallImpact / 12), 180);
+    if (v.wallImpact > 2) {
+      this.rig.addShake(Math.min(1, v.wallImpact / 10));
+      this.ctx.input.rumble(Math.min(1, v.wallImpact / 12), 180);
     }
-    if (k.kartImpact > 2) {
-      this.rig.addShake(Math.min(0.6, k.kartImpact / 12));
+    if (v.kartImpact > 2) {
+      this.rig.addShake(Math.min(0.6, v.kartImpact / 12));
       this.ctx.input.rumble(0.4, 100);
     }
     if (k.rumble > 0 && sp > 8) this.rig.addShake(0.015 * k.rumble);
@@ -433,12 +469,12 @@ export class RaceView {
         const c: [number, number, number] = k.surface === 'grass' ? [0.45, 0.5, 0.3] : k.surface === 'sand' ? [0.9, 0.82, 0.6] : [0.78, 0.7, 0.58];
         this.effects.puff(pos.x - Math.sin(yaw) * 0.9, pos.y, pos.z - Math.cos(yaw) * 0.9, c, 0.8, 0.9, 1.2);
       }
-      if (k.wallImpact > 3) {
-        this.effects.impact(pos.x, pos.y, pos.z, k.wallImpact);
-        if (d2 < 30 * 30) this.ctx.audio.hit(k.wallImpact * (v.comp === this.player ? 1 : 0.5));
+      if (v.wallImpact > 3) {
+        this.effects.impact(pos.x, pos.y, pos.z, v.wallImpact);
+        if (d2 < 30 * 30) this.ctx.audio.hit(v.wallImpact * (v.comp === this.player ? 1 : 0.5));
       }
-      if (k.kartImpact > 3 && d2 < 25 * 25) this.ctx.audio.hit(k.kartImpact * 0.6);
-      for (const e of k.events) {
+      if (v.kartImpact > 3 && d2 < 25 * 25) this.ctx.audio.hit(v.kartImpact * 0.6);
+      for (const e of v.events) {
         if (e === 'boost1' || e === 'boost2') {
           this.effects.boostBurst(pos.x, pos.y, pos.z, yaw, e === 'boost2' ? 2 : 1);
           if (v.comp === this.player) {
@@ -713,6 +749,7 @@ export class RaceView {
     });
     this.hud.dispose();
     this.pauseEl.remove();
+    this.tutorial?.dispose();
     this.endPrompt.remove();
     this.ctx.audio.silenceLoops();
   }

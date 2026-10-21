@@ -107,6 +107,11 @@ export interface Trophies {
   titles: number;
   wins: number;
   podiums: number;
+  /** Títulos ganados en Difícil o Pro. */
+  titlesHard?: number;
+  tutorial?: boolean;
+  /** El jugador descartó la invitación al tutorial. */
+  tutorialDismissed?: boolean;
 }
 
 export function loadTrophies(): Trophies {
