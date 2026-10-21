@@ -1,5 +1,5 @@
 import { AIDriver, type AIWorld } from '../ai/AIDriver';
-import { DIFF_SPEED, paceFactor, type Difficulty, type DriverDef } from '../ai/Drivers';
+import { paceFactor, type Difficulty, type DriverDef } from '../ai/Drivers';
 import { clamp, damp, rng } from '../core/math';
 import { collideKarts, emptyInput, Kart, KART, type KartInput } from '../physics/Kart';
 import { KERB_WIDTH, type Track } from '../track/Track';
@@ -26,7 +26,7 @@ export interface SimConfig {
   entrants: Entrant[];
   /** Duración de la sesión en segundos (libres/clasificación). 0 = ilimitada. */
   duration?: number;
-  /** Vuelta de referencia de la IA a ritmo 1.0 (para simular su clasificación). */
+  /** Vuelta de referencia de una IA perfecta a ritmo de la dificultad (simula la clasificación). */
   refLap?: number;
   seed?: number;
 }
@@ -152,6 +152,7 @@ export class RaceSim {
   timeLeft = 0;
   timeUp = false;
   private aiWorld: AIWorld;
+  private gridInput: KartInput = emptyInput();
 
   constructor(cfg: SimConfig) {
     this.cfg = cfg;
@@ -230,6 +231,14 @@ export class RaceSim {
         }
       } else {
         inp = playerInput;
+        if (!racing) {
+          // En parrilla el freno no engrana la marcha atrás.
+          this.gridInput.throttle = inp.throttle;
+          this.gridInput.steer = inp.steer;
+          this.gridInput.brake = 0;
+          this.gridInput.drift = false;
+          inp = this.gridInput;
+        }
         if (playerRespawn && racing) c.kart.respawn(track);
       }
       c.input = inp;
@@ -243,8 +252,9 @@ export class RaceSim {
     if (this.phase === 'countdown') {
       for (const c of this.comps) {
         if (c.jumpStart) continue;
-        const d = Math.hypot(c.kart.x - c.gridX, c.kart.z - c.gridZ);
-        if (d > 0.7) {
+        // Solo cuenta avanzar (en el sentido de la pista) antes de tiempo.
+        const fwd = (c.kart.x - c.gridX) * c.kart.proj.tx + (c.kart.z - c.gridZ) * c.kart.proj.tz;
+        if (fwd > 0.7) {
           c.jumpStart = true;
           c.penalty += 5;
           this.events.push({ type: 'jumpstart', id: c.id });
@@ -475,8 +485,8 @@ export class RaceSim {
     for (const e of this.cfg.entrants) {
       if (e.isPlayer || !e.driver) continue;
       const d = e.driver;
-      const f = DIFF_SPEED[this.cfg.difficulty] * paceFactor(d);
-      const base = refLap / Math.pow(f, 1.05);
+      // El tiempo de vuelta escala aprox. con (1/velocidad)^0.72 (las rectas van a tope).
+      const base = refLap / Math.pow(paceFactor(d), 0.72);
       const laps: { at: number; time: number }[] = [];
       const n = 3;
       let at = dur * (0.18 + this.rand() * 0.15);

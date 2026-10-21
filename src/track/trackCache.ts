@@ -17,12 +17,13 @@ export function getTrack(id: string): Track {
   return t;
 }
 
-/** Vuelta de referencia de la IA a ritmo máximo (simulada, cacheada). */
-export function getRefLap(id: string): number {
-  let r = refs.get(id);
+/** Vuelta de referencia de una IA perfecta al ritmo indicado (simulada y cacheada). */
+export function getRefLap(id: string, speedFactor = 1): number {
+  const key = `${id}@${speedFactor}`;
+  let r = refs.get(key);
   if (r == null) {
-    r = referenceLap(getTrack(id), 1.0);
-    refs.set(id, r);
+    r = referenceLap(getTrack(id), speedFactor);
+    refs.set(key, r);
   }
   return r;
 }

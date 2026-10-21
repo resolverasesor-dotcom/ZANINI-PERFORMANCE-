@@ -177,7 +177,7 @@ export class AIDriver {
 
     if (!w.racing) {
       inp.throttle = 0;
-      inp.brake = 1;
+      inp.brake = 0;
       inp.drift = false;
       this.stuckTime = 0;
       return inp;

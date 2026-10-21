@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
-import type { Difficulty } from '../ai/Drivers';
+import { DIFF_SPEED, type Difficulty } from '../ai/Drivers';
 import type { Input } from '../core/Input';
 import { clamp, damp, formatDelta, formatTime } from '../core/math';
 import type { CameraMode, Profile, Settings } from '../core/Settings';
@@ -136,7 +136,7 @@ export class RaceView {
     private onDone: (o: SessionOutcome) => void,
   ) {
     this.track = getTrack(setup.trackId);
-    const refLap = setup.kind === 'quali' ? getRefLap(setup.trackId) : undefined;
+    const refLap = setup.kind === 'quali' ? getRefLap(setup.trackId, DIFF_SPEED[setup.difficulty]) : undefined;
     this.sim = new RaceSim({
       track: this.track,
       kind: setup.kind,

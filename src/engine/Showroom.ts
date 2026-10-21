@@ -121,7 +121,7 @@ export class Podium {
       this.karts.push(kart);
     });
     const banner = new THREE.Mesh(new THREE.PlaneGeometry(14, 2.6), new THREE.MeshBasicMaterial({ map: bannerTex(0) }));
-    banner.position.set(0, 6, -6);
+    banner.position.set(0, 4.4, -9);
     this.scene.add(banner);
 
     const n = 900;
