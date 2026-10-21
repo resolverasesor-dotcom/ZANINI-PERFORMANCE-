@@ -335,6 +335,13 @@ export class RaceView {
     for (const v of this.views) v.update(alpha, dt, this.track);
     this.updateEffects(dt);
     this.updateCamera(dt);
+    // Un kart pegado a la cámara taparía la vista: se oculta.
+    const cp = this.rig.camera.position;
+    for (const v of this.views) {
+      if (v.comp === this.player) continue;
+      const p = v.mesh.root.position;
+      v.mesh.root.visible = (p.x - cp.x) ** 2 + (p.y - cp.y) ** 2 + (p.z - cp.z) ** 2 > 2.6 * 2.6;
+    }
     this.updateGhost();
     this.updateAudio();
     this.updateHud(dt);

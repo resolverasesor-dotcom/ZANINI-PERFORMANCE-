@@ -8,7 +8,7 @@ import { DRIVERS, DIFF_SPEED, type Difficulty } from '../src/ai/Drivers';
 import { RaceSim, referenceLap, type Entrant } from '../src/race/RaceSim';
 import { emptyInput } from '../src/physics/Kart';
 
-(globalThis as any).__aiRespawn = {}; (globalThis as any).__aiWrong = [];
+(globalThis as any).__aiRespawn = {};
 const diff = (process.argv[2] as Difficulty) ?? 'normal';
 const only = process.argv[3];
 let fail = false;
@@ -50,5 +50,4 @@ for (const def of CIRCUITS) {
   console.log(`${ok ? 'OK ' : 'ERR'} ${def.name.padEnd(20)} ref(pro)=${ref.toFixed(2)} ref(${diff})=${refN.toFixed(2)} best=${best.toFixed(2)} winner=${res[0]?.entrant.short} t=${sim.time.toFixed(0)}s respawns=${respawns} wallHits=${wallHits} kartHits=${kartHits} drifts=${drifts} maxOut=${maxOut.toFixed(3)} (${Date.now() - t0}ms) ${JSON.stringify((globalThis as any).__aiRespawn)}`); (globalThis as any).__aiRespawn = {};
   if (process.argv[4] === 'v') for (const r of res) console.log(`   ${r.position}. ${r.entrant.short} ${r.total.toFixed(2)} best=${r.bestLap?.toFixed(2)} pen=${r.penalty} down=${r.lapsDown}`);
 }
-if (process.env.DBG) console.log((globalThis as any).__aiWrong.slice(0, 30).join("\n"));
 process.exit(fail ? 1 : 0);

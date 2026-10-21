@@ -2,13 +2,15 @@
   "name": "zanini-performance",
   "private": true,
   "version": "1.0.0",
-  "description": "ZANINI PERFORMANCE — juego de karts 3D para navegador",
+  "description": "ZANINI PERFORMANCE \u2014 juego de karts 3D para navegador",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:tracks": "tsx scripts/check-tracks.ts track-previews",
+    "test:ai": "tsx scripts/sim-races.ts normal"
   },
   "devDependencies": {
     "@types/three": "0.170.0",

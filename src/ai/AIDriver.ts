@@ -186,8 +186,6 @@ export class AIDriver {
     // --- Anti-atascos ---
     const along = fx * k.proj.tx + fz * k.proj.tz;
     if (along < -0.3) {
-      const g = globalThis as unknown as { __aiWrong?: string[] };
-      if (this.wrongWay === 0 && g.__aiWrong) g.__aiWrong.push(`v=${v.toFixed(1)} vL=${k.vL.toFixed(1)} drift=${k.drifting} rev=${this.reverseTime.toFixed(2)} stuck=${this.stuckTime.toFixed(2)} s=${s.toFixed(0)} lat=${k.proj.lat.toFixed(1)} hw=${hw.toFixed(1)} surf=${k.surface} mistake=${this.mistake?.kind}`);
       this.wrongWay += dt;
     }
     else this.wrongWay = Math.max(0, this.wrongWay - dt);

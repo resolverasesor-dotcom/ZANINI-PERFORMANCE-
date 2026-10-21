@@ -66,6 +66,7 @@ export class Game {
   private last = performance.now();
   private booted = false;
   private menuBack: (() => void) | null = null;
+  private shownAt = 0;
   private fpsAcc = 0;
   private fpsFrames = 0;
   fps = 60;
@@ -158,6 +159,7 @@ export class Game {
   private show(html: string, handlers: Record<string, (el: HTMLElement) => void>, back: (() => void) | null, cls = ''): void {
     this.screen.className = 'screen ' + cls;
     this.screen.innerHTML = html;
+    this.shownAt = performance.now();
     this.menuBack = back;
     this.screen.querySelectorAll<HTMLElement>('[data-act]').forEach((b) => {
       const act = b.dataset.act!;
@@ -165,6 +167,8 @@ export class Game {
       if (!h) return;
       b.addEventListener('click', (ev) => {
         ev.preventDefault();
+        // Evita el "clic fantasma" de un toque que cambió de pantalla.
+        if (performance.now() - this.shownAt < 350) return;
         this.audio.unlock();
         this.audio.click();
         h(b);
