@@ -37,6 +37,8 @@ export interface DecorProto {
   shadow: boolean;
   /** Se apoya en la cota de la pista (no en el suelo). */
   onTrack: boolean;
+  /** Geometría animada adicional con las mismas transformaciones (público de las gradas). */
+  crowd?: THREE.BufferGeometry;
 }
 
 const vc = () => new THREE.MeshLambertMaterial({ vertexColors: true });
@@ -98,16 +100,22 @@ export function makeProto(type: DecorType, theme: string, variant = 0): DecorPro
     }
     case 'grandstand': {
       const parts: THREE.BufferGeometry[] = [];
-      const crowd = ['#D7261E', '#FFC300', '#ffffff', '#1E6FE0', '#111111', '#43A047'];
+      const people: THREE.BufferGeometry[] = [];
+      const crowd = ['#D7261E', '#FFC300', '#ffffff', '#1E6FE0', '#111111', '#43A047', '#ff7fae', '#00BCD4'];
+      const skin = ['#f1c7a3', '#d8a27a', '#a8714e', '#f5d6bd'];
       for (let r = 0; r < 5; r++) {
         parts.push(part(new THREE.BoxGeometry(30, 0.8, 1.6), '#9aa0a8', M(0, 0.4 + r * 0.8, -r * 1.6)));
         for (let k = 0; k < 14; k++) {
-          parts.push(part(new THREE.BoxGeometry(1.2, 0.7, 0.6), crowd[(k * 7 + r * 3) % crowd.length], M(-13.5 + k * 2.08 + (r % 2) * 0.6, 1.1 + r * 0.8, -r * 1.6 - 0.2)));
+          const x = -13.5 + k * 2.08 + (r % 2) * 0.6;
+          people.push(part(new THREE.BoxGeometry(0.9, 0.7, 0.5), crowd[(k * 7 + r * 3) % crowd.length], M(x, 1.15 + r * 0.8, -r * 1.6 - 0.2)));
+          people.push(part(new THREE.BoxGeometry(0.42, 0.42, 0.42), skin[(k + r) % skin.length], M(x, 1.72 + r * 0.8, -r * 1.6 - 0.2)));
+          // algunos con los brazos (o una bandera) en alto
+          if ((k + r) % 3 === 0) people.push(part(new THREE.BoxGeometry(0.15, 0.6, 0.15), (k + r) % 2 ? '#FFC300' : '#D7261E', M(x + 0.4, 2.0 + r * 0.8, -r * 1.6 - 0.2)));
         }
       }
       parts.push(part(new THREE.BoxGeometry(31, 0.3, 9.5), '#D7261E', M(0, 7.6, -3.6, -0.06)));
       for (const x of [-15, 15]) parts.push(part(new THREE.BoxGeometry(0.4, 7.5, 0.4), '#555', M(x, 3.75, -7.6)));
-      return { geo: mergeGeometries(parts)!, mat: vc(), shadow: true, onTrack: false };
+      return { geo: mergeGeometries(parts)!, mat: vc(), shadow: true, onTrack: false, crowd: mergeGeometries(people)! };
     }
     case 'tyres': {
       const parts: THREE.BufferGeometry[] = [];

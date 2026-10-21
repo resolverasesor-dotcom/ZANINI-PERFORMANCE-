@@ -71,6 +71,7 @@ export function groundTex(theme: string): THREE.Texture {
     mountain: [72, 116, 60],
     night: [38, 40, 48],
     quarry: [176, 140, 96],
+    sunset: [150, 140, 100],
   };
   noiseFill(ctx, 256, 256, base[theme] ?? [86, 146, 62], theme === 'night' ? 14 : 34, 31, 2);
   return finish(key, c);

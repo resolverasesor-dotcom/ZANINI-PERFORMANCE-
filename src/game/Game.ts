@@ -26,14 +26,17 @@ import {
   loadTrophies,
   newChampionship,
   rounds,
+  seriesName,
   saveChampionship,
   saveTrophies,
   standings,
   type ChampState,
 } from '../race/Championship';
 import { loadRecord } from '../race/Ghost';
+import { MEDAL_ICON, medalFor, medalTimes } from '../race/medals';
+import type { TrackDef } from '../track/TrackData';
 import type { Entrant, RaceResultRow } from '../race/RaceSim';
-import { CIRCUITS, getCircuit } from '../track/circuits/index';
+import { CIRCUITS, getCircuit, SERIES, type SeriesKey } from '../track/circuits/index';
 import { getTrack } from '../track/trackCache';
 import { el, esc, logoHTML } from '../ui/dom';
 import { drawLayout } from '../ui/Minimap';
@@ -270,35 +273,54 @@ export class Game {
 
   // ---------------- selección de circuito ----------------
   private showTrackSelect(mode: Mode): void {
-    const cards = CIRCUITS.map((c, i) => {
+    const card = (c: TrackDef) => {
       const rec = loadRecord(c.id);
+      const medal = medalFor(c, rec.best);
+      const mt = medalTimes(c);
       return `<button class="track-card" data-act="pick" data-id="${c.id}">
         <canvas class="track-prev" data-prev="${c.id}" width="220" height="140"></canvas>
         <div class="tc-body">
-          <div class="tc-num">${i + 1}</div>
-          <div class="tc-name">${esc(c.name)}</div>
+          <div class="tc-name">${esc(c.name)} ${medal ? `<span class="medal" title="Medalla de ${medal}">${MEDAL_ICON[medal]}</span>` : ''}</div>
           <div class="tc-sub">${esc(c.subtitle)} · ${(c.length / 1000).toFixed(2)} km · ${'★'.repeat(c.difficulty)}${'☆'.repeat(5 - c.difficulty)}</div>
           <div class="tc-desc">${esc(c.description)}</div>
-          <div class="tc-rec"><span>Récord ${esc(c.record.holder)}: <b>${formatTime(c.record.time)}</b></span><span>Tu mejor: <b>${formatTime(rec.best)}</b></span></div>
+          <div class="tc-rec"><span>Récord ${esc(c.record.holder)}: <b>${formatTime(c.record.time)}</b></span><span>Tu mejor: <b>${formatTime(rec.best)}</b></span>
+          ${mode === 'timetrial' ? `<span class="tc-medals">🥇 ${formatTime(mt.oro)} · 🥈 ${formatTime(mt.plata)} · 🥉 ${formatTime(mt.bronce)}</span>` : ''}</div>
         </div>
       </button>`;
-    }).join('');
+    };
+    const group = (title: string, list: TrackDef[]) => `<h2 class="series-title">${title}</h2><div class="track-grid">${list.map(card).join('')}</div>`;
+    const zanini = CIRCUITS.filter((c) => (c.series ?? 'zanini') === 'zanini');
+    const costa = CIRCUITS.filter((c) => c.series === 'costa');
     this.show(
-      `<div class="page">
+      `<div class="page with-preview">
         <div class="page-head">${this.backBtn()}<h1>${MODE_INFO[mode].title}</h1><div class="page-sub">Elige circuito</div></div>
-        <div class="track-grid">${cards}</div>
+        ${group('🏆 Circuitos Zanini', zanini)}
+        ${group('🌴 Kartódromos de la Costa Blanca', costa)}
       </div>`,
       {
-        back: () => this.showMain(),
+        back: () => {
+          this.showroom.setPreview(null);
+          this.showMain();
+        },
         pick: (b) => {
+          this.showroom.setPreview(null);
           const id = b.dataset.id!;
           if (mode === 'practice' || mode === 'timetrial') this.startSimple(mode, id);
           else this.showRaceSetup(mode, id);
         },
       },
-      () => this.showMain(),
+      () => {
+        this.showroom.setPreview(null);
+        this.showMain();
+      },
       'menu',
     );
+    // Maqueta 3D del circuito al pasar por encima o enfocar una tarjeta
+    this.screen.querySelectorAll<HTMLElement>('.track-card').forEach((el) => {
+      const on = () => this.showroom.setPreview(getTrack(el.dataset.id!));
+      el.addEventListener('mouseenter', on);
+      el.addEventListener('focus', on);
+    });
     // Vistas previas
     requestAnimationFrame(() => {
       this.screen.querySelectorAll<HTMLCanvasElement>('canvas[data-prev]').forEach((cv) => {
@@ -588,11 +610,14 @@ export class Game {
   private champSetup(): void {
     let diff: Difficulty = this.settings.difficulty;
     let laps = 0;
+    let series: SeriesKey = 'zanini';
     const render = () =>
       this.show(
         `<div class="page narrow">
           <div class="page-head">${this.backBtn()}<h1>Nuevo campeonato</h1><div class="page-sub">6 Grandes Premios · clasificación + carrera</div></div>
           <div class="panel form">
+            ${this.choice('Calendario', 'series', [['zanini', '🏆 Campeonato Zanini'], ['costa', '🌴 Copa Costa Blanca']], series)}
+            <div class="hint">${SERIES[series].tracks.map((id) => esc(getCircuit(id).name)).join(' · ')}</div>
             ${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), diff)}
             ${this.stepper('Vueltas por carrera', 'laps', laps, laps === 0 ? 'Las de cada circuito' : String(laps))}
             <div class="hint">Puntos: ${POINTS_LEGEND}. Se guarda automáticamente tras cada sesión.</div>
@@ -601,6 +626,10 @@ export class Game {
         </div>`,
         {
           back: () => this.showMain(),
+          series: (b) => {
+            series = b.dataset.val as SeriesKey;
+            render();
+          },
           diff: (b) => {
             diff = b.dataset.val as Difficulty;
             render();
@@ -615,7 +644,7 @@ export class Game {
           },
           go: () => {
             clearChampionship();
-            newChampionship(diff, laps);
+            newChampionship(diff, laps, series);
             this.champHub();
           },
         },
@@ -645,7 +674,7 @@ export class Game {
     const c = loadChampionship();
     if (!c) return this.showMain();
     if (c.stage === 'done') return this.champCeremony(c);
-    const ids = rounds();
+    const ids = rounds(c);
     const cal = ids
       .map((id, i) => {
         const d = getCircuit(id);
@@ -661,7 +690,7 @@ export class Game {
     const diffLabel = DIFFICULTIES.find((d) => d.id === c.difficulty)?.label;
     this.show(
       `<div class="page">
-        <div class="page-head">${this.backBtn()}<h1>Campeonato Zanini</h1><div class="page-sub">Dificultad ${diffLabel} · GP ${c.round + 1}/6 · ${esc(def.name)}</div></div>
+        <div class="page-head">${this.backBtn()}<h1>${esc(seriesName(c))}</h1><div class="page-sub">Dificultad ${diffLabel} · GP ${c.round + 1}/6 · ${esc(def.name)}</div></div>
         <div class="two-col">
           <div class="panel"><h3>Calendario</h3>${cal}</div>
           <div class="panel"><h3>Clasificación general</h3>${this.standingsTable(c)}</div>
@@ -675,7 +704,7 @@ export class Game {
   }
 
   private champRunStage(c: ChampState): void {
-    const trackId = rounds()[c.round];
+    const trackId = rounds(c)[c.round];
     const def = getCircuit(trackId);
     const laps = c.laps || def.laps;
     const ents = this.allEntrants();
@@ -739,7 +768,7 @@ export class Game {
     setTimeout(() => this.audio.fanfare(), 1600);
     this.show(
       `<div class="ceremony">
-        <div class="cer-title">${champ.isPlayer ? '¡TÍTULO MUNDIAL ZANINI PARA TI!' : 'TÍTULO DEL CAMPEONATO ZANINI'}</div>
+        <div class="cer-title">${champ.isPlayer ? `¡${esc(seriesName(c)).toUpperCase()} PARA TI!` : esc(seriesName(c)).toUpperCase()}</div>
         <div class="cer-name">${esc(champ.name)}</div>
         <div class="cer-sub">${st[0].points} puntos · ${st[0].wins} victorias</div>
         <div class="cer-podium">${top.map((e, i) => `<span>${i + 1}. ${esc(e.name)} (${st[i].points})</span>`).join('')}</div>

@@ -1313,3 +1313,25 @@ table.results {
     display: none !important;
   }
 }
+
+/* ---------- Selección de circuito con maqueta 3D ---------- */
+.page.with-preview {
+  max-width: 820px;
+  margin: 0;
+}
+.series-title {
+  font-family: var(--font);
+  font-style: italic;
+  font-size: 18px;
+  color: var(--yellow);
+  margin: 18px 0 10px;
+  transform: skewX(-6deg);
+}
+.medal {
+  font-style: normal;
+  font-size: 18px;
+}
+.tc-medals {
+  margin-top: 3px;
+  opacity: 0.9;
+}

@@ -1,7 +1,7 @@
 import type { Difficulty } from '../ai/Drivers';
 import { POINTS } from '../config';
 import { load, remove, save } from '../core/Storage';
-import { CIRCUITS } from '../track/circuits/index';
+import { SERIES, type SeriesKey } from '../track/circuits/index';
 import type { RaceResultRow } from './RaceSim';
 
 export interface GPResult {
@@ -21,16 +21,22 @@ export interface ChampState {
   grid: string[] | null;
   points: Record<string, number>;
   results: GPResult[];
+  /** Calendario (las partidas antiguas no lo tienen: Campeonato Zanini). */
+  series?: SeriesKey;
 }
 
 const KEY = 'championship';
 
-export function rounds(): string[] {
-  return CIRCUITS.map((c) => c.id);
+export function rounds(s?: ChampState | null): string[] {
+  return [...SERIES[s?.series ?? 'zanini'].tracks];
 }
 
-export function newChampionship(difficulty: Difficulty, laps: number): ChampState {
-  const s: ChampState = { version: 1, difficulty, laps, round: 0, stage: 'quali', grid: null, points: {}, results: [] };
+export function seriesName(s?: ChampState | null): string {
+  return SERIES[s?.series ?? 'zanini'].name;
+}
+
+export function newChampionship(difficulty: Difficulty, laps: number, series: SeriesKey = 'zanini'): ChampState {
+  const s: ChampState = { version: 1, difficulty, laps, round: 0, stage: 'quali', grid: null, points: {}, results: [], series };
   saveChampionship(s);
   return s;
 }
@@ -64,11 +70,11 @@ export function racePoints(results: RaceResultRow[]): { points: Record<string, n
 export function applyRace(s: ChampState, results: RaceResultRow[]): GPResult {
   const { points, fastest } = racePoints(results);
   for (const [id, p] of Object.entries(points)) s.points[id] = (s.points[id] ?? 0) + p;
-  const gp: GPResult = { trackId: rounds()[s.round], order: results.map((r) => r.id), fastest, points };
+  const gp: GPResult = { trackId: rounds(s)[s.round], order: results.map((r) => r.id), fastest, points };
   s.results.push(gp);
   s.round++;
   s.grid = null;
-  s.stage = s.round >= rounds().length ? 'done' : 'quali';
+  s.stage = s.round >= rounds(s).length ? 'done' : 'quali';
   saveChampionship(s);
   return gp;
 }

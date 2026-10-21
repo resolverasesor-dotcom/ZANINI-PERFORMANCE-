@@ -5,6 +5,8 @@ import { KERB_WIDTH, type Track } from '../track/Track';
 import type { DecorType, ThemeId } from '../track/TrackData';
 import { makeProto } from './decor';
 import { adTex, ADS } from './ads';
+import { crowdMaterial, flagMaterial, Gulls, seaMaterial } from './ambient';
+import { buildLandmark } from './landmarks';
 import {
   asphaltTex,
   bannerTex,
@@ -42,6 +44,7 @@ export const THEMES: Record<ThemeId, ThemeLook> = {
   mountain: { skyTop: '#4f86c4', skyHorizon: '#e1ebf3', fog: '#c8d7e3', fogNear: 120, fogFar: 650, hemiSky: '#f0f6ff', hemiGround: '#4a5e40', hemi: 1.5, sun: '#fff7e8', sunI: 2.4, sunDir: [0.3, 1, -0.5] },
   night: { skyTop: '#03050c', skyHorizon: '#1c2440', fog: '#0c1124', fogNear: 60, fogFar: 420, hemiSky: '#7c8fd0', hemiGround: '#1a1a28', hemi: 0.9, sun: '#9fb0ff', sunI: 0.5, sunDir: [0.3, 1, 0.2] },
   quarry: { skyTop: '#6aa6dc', skyHorizon: '#f6e2bf', fog: '#ecd8b4', fogNear: 150, fogFar: 750, hemiSky: '#fff8ea', hemiGround: '#9c7c52', hemi: 1.6, sun: '#ffe4b8', sunI: 2.7, sunDir: [-0.5, 1, -0.3] },
+  sunset: { skyTop: '#3a2d72', skyHorizon: '#ff9e63', fog: '#f0a27c', fogNear: 160, fogFar: 760, hemiSky: '#ffd8b8', hemiGround: '#6e5544', hemi: 1.4, sun: '#ffb070', sunI: 2.5, sunDir: [-0.7, 0.35, 0.6] },
   gp: { skyTop: '#3e74c8', skyHorizon: '#ffd9ab', fog: '#f4dcc0', fogNear: 170, fogFar: 850, hemiSky: '#fff1e0', hemiGround: '#5f6f42', hemi: 1.5, sun: '#ffd49c', sunI: 2.8, sunDir: [0.8, 0.7, 0.2] },
 };
 
@@ -112,6 +115,8 @@ export class TrackScene {
     this.buildPits();
     this.buildDecor();
     this.buildBackdrop();
+    this.buildLandmarks();
+    this.buildFlags();
   }
 
   // ---------- utilidades ----------
@@ -321,7 +326,8 @@ export class TrackScene {
       this.disposables.push(water);
       const sw = 3000;
       water.repeat.set(sw / 24, sw / 24);
-      const seaMesh = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(sw, sw)), this.mat(new THREE.MeshLambertMaterial({ map: water, color: '#9fd6ff' })));
+      const segs = this.quality === 'bajo' ? 40 : 140;
+      const seaMesh = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(sw, sw, segs, segs)), this.mat(seaMaterial(this.time, water, this.quality !== 'bajo')));
       seaMesh.rotation.x = -Math.PI / 2;
       const cx = sea.axis === 'x' ? sea.value + (sea.dir * sw) / 2 : (b.minX + b.maxX) / 2;
       const cz = sea.axis === 'z' ? sea.value + (sea.dir * sw) / 2 : (b.minZ + b.maxZ) / 2;
@@ -339,7 +345,84 @@ export class TrackScene {
         beach.position.set(sea.value + sea.dir * 3, this.groundY - 0.15, (b.minZ + b.maxZ) / 2);
       }
       this.group.add(beach);
+      // Espuma en la orilla
+      const foamMat = this.mat(new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, depthWrite: false }));
+      const foam = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(3000, 2.2)), foamMat);
+      foam.rotation.x = -Math.PI / 2;
+      if (sea.axis === 'z') foam.position.set((b.minX + b.maxX) / 2, this.groundY - 0.12, sea.value + sea.dir * 9);
+      else {
+        foam.rotation.z = Math.PI / 2;
+        foam.position.set(sea.value + sea.dir * 9, this.groundY - 0.12, (b.minZ + b.maxZ) / 2);
+      }
+      this.group.add(foam);
+      this.foam = { mesh: foam, base: sea.axis === 'z' ? foam.position.z : foam.position.x, axis: sea.axis, dir: sea.dir };
+      // Gaviotas
+      const gx = sea.axis === 'z' ? (b.minX + b.maxX) / 2 : sea.value + sea.dir * 20;
+      const gz = sea.axis === 'z' ? sea.value + sea.dir * 20 : (b.minZ + b.maxZ) / 2;
+      this.gulls = new Gulls(gx, gz, this.groundY, this.quality === 'bajo' ? 6 : 14);
+      this.group.add(this.gulls.group);
     }
+  }
+
+  private foam: { mesh: THREE.Mesh; base: number; axis: 'x' | 'z'; dir: number } | null = null;
+  private gulls: Gulls | null = null;
+  readonly time = { value: 0 };
+  private landmarkUpdates: ((t: number) => void)[] = [];
+
+  /** Monumentos del circuito (Peñón, Intempo, castillo...). */
+  private buildLandmarks(): void {
+    for (const lm of this.track.def.landmarks ?? []) {
+      const o = buildLandmark(lm, this.groundY, this.groundY - 0.35);
+      this.group.add(o.object);
+      o.object.traverse((c) => {
+        if (c instanceof THREE.Mesh) {
+          this.disposables.push(c.geometry, c.material as THREE.Material);
+        }
+      });
+      if (o.update) this.landmarkUpdates.push(o.update);
+    }
+  }
+
+  /** Banderas a ambos lados de la recta de meta. */
+  private buildFlags(): void {
+    const t = this.track;
+    const spots: { x: number; y: number; z: number }[] = [];
+    for (let s = -70; s <= 50; s += 10) {
+      for (const side of [-1, 1]) {
+        if (this.inPitZone(s, side)) continue;
+        const i = t.index(s);
+        if (t.bridge[i]) continue;
+        const lim = t.hw[i] + (side > 0 ? t.runR[i] : t.runL[i]);
+        const p = { x: 0, y: 0, z: 0 };
+        t.pointAt(s, side * (lim + 1.6), p);
+        if (this.inSea(p.x, p.z)) continue;
+        spots.push(p);
+      }
+    }
+    if (!spots.length) return;
+    const W = 2.4;
+    const poleGeo = this.geo(new THREE.CylinderGeometry(0.06, 0.08, 6.2, 5));
+    poleGeo.translate(0, 3.1, 0);
+    const poles = new THREE.InstancedMesh(poleGeo, this.mat(new THREE.MeshLambertMaterial({ color: '#d8d8d8' })), spots.length);
+    const clothGeo = this.geo(new THREE.PlaneGeometry(W, 1.4, 10, 2));
+    clothGeo.translate(W / 2, 0, 0);
+    const flags = new THREE.InstancedMesh(clothGeo, this.mat(flagMaterial(this.time, W)), spots.length);
+    const palette = ['#D7261E', '#FFC300', '#ffffff', '#111111'];
+    const dummy = new THREE.Object3D();
+    const wind = 0.6; // dirección del viento (rad)
+    spots.forEach((p, i) => {
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      poles.setMatrixAt(i, dummy.matrix);
+      dummy.position.set(p.x, p.y + 5.4, p.z);
+      dummy.rotation.set(0, wind, 0);
+      dummy.updateMatrix();
+      flags.setMatrixAt(i, dummy.matrix);
+      flags.setColorAt(i, new THREE.Color(palette[i % palette.length]));
+    });
+    flags.frustumCulled = false;
+    this.group.add(poles, flags);
   }
 
   private buildRoad(): void {
@@ -670,6 +753,17 @@ export class TrackScene {
       mesh.castShadow = proto.shadow && this.quality === 'alto';
       mesh.receiveShadow = false;
       this.group.add(mesh);
+      if (proto.crowd) {
+        // Público animado con las mismas posiciones que las gradas
+        this.disposables.push(proto.crowd);
+        const cm = new THREE.InstancedMesh(proto.crowd, this.mat(crowdMaterial(this.time)), list.length);
+        for (let i = 0; i < list.length; i++) {
+          mesh.getMatrixAt(i, dummy.matrix);
+          cm.setMatrixAt(i, dummy.matrix);
+        }
+        cm.frustumCulled = false;
+        this.group.add(cm);
+      }
     }
 
     // Paseo marítimo
@@ -783,7 +877,18 @@ export class TrackScene {
       this.sun.position.copy(focus).addScaledVector(d, 100);
       this.sun.target.updateMatrixWorld();
     }
+    this.time.value += dt;
+    const t = this.time.value;
     if (this.water) this.water.offset.x = (this.water.offset.x + dt * 0.01) % 1;
+    if (this.foam) {
+      const f = this.foam;
+      const off = Math.sin(t * 0.9) * 1.6;
+      if (f.axis === 'z') f.mesh.position.z = f.base + f.dir * off;
+      else f.mesh.position.x = f.base + f.dir * off;
+      (f.mesh.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(t * 0.9 + 1.2));
+    }
+    this.gulls?.update(t);
+    for (const u of this.landmarkUpdates) u(t);
   }
 
   dispose(scene: THREE.Scene): void {

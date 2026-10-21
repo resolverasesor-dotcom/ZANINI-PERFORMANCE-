@@ -6,7 +6,7 @@ import { clamp, damp, formatDelta, formatTime } from '../core/math';
 import type { CameraMode, Profile, Settings } from '../core/Settings';
 import { saveSettings } from '../core/Settings';
 import { CameraRig } from '../engine/CameraRig';
-import { Effects } from '../engine/Effects';
+import { Effects, SkidMarks } from '../engine/Effects';
 import { buildKart, wavePennant, type KartMesh } from '../engine/KartModel';
 import { skyEnvironment } from '../engine/envmap';
 import { TrackScene } from '../engine/TrackScene';
@@ -112,6 +112,7 @@ export class RaceView {
   private rig: CameraRig;
   private views: KartView[] = [];
   private effects: Effects;
+  private skids: SkidMarks;
   private hud: Hud;
   private minimap: Minimap;
   private acc = 0;
@@ -165,6 +166,8 @@ export class RaceView {
     this.rig.mode = ctx.settings.camera;
     this.effects = new Effects(quality === 'bajo');
     this.scene.add(this.effects.group);
+    this.skids = new SkidMarks(quality === 'bajo' ? 500 : 1600);
+    this.scene.add(this.skids.mesh);
     for (const c of this.sim.comps) this.views.push(new KartView(c, this.scene, quality !== 'bajo'));
     // Reflejos: entorno generado a partir del cielo del circuito
     if (quality !== 'bajo') {
@@ -413,6 +416,17 @@ export class RaceView {
       if (k.drifting && k.speed > 6) {
         this.effects.driftSparks(pos.x, pos.y, pos.z, yaw, k.driftLevel, k.driftDir);
         if (Math.random() < 0.35) this.effects.puff(pos.x - Math.sin(yaw) * 0.8, pos.y, pos.z - Math.cos(yaw) * 0.8, [0.85, 0.85, 0.85], 0.5, 0.7, 0.6);
+      }
+      // Marcas de neumático al derrapar, deslizar o frenar a fondo
+      const sliding = (k.drifting || Math.abs(k.vL) > 2.6 || (v.comp.input.brake > 0.8 && k.vF > 12)) && k.speed > 5;
+      const onAsphalt = k.surface === 'track' || k.surface === 'asphalt';
+      for (const side of [-1, 1]) {
+        const key = `${v.comp.id}${side}`;
+        if (sliding && onAsphalt) {
+          const fx = Math.sin(yaw);
+          const fz = Math.cos(yaw);
+          this.skids.mark(key, pos.x - fx * 0.62 - fz * side * 0.62, pos.y, pos.z - fz * 0.62 + fx * side * 0.62);
+        } else this.skids.lift(key);
       }
       const off = k.surface === 'grass' || k.surface === 'gravel' || k.surface === 'sand';
       if (off && k.speed > 4 && Math.random() < 0.7) {
@@ -692,6 +706,7 @@ export class RaceView {
   dispose(): void {
     this.trackScene.dispose(this.scene);
     this.effects.dispose();
+    this.skids.dispose();
     for (const v of this.views) for (const m of v.mesh.materials) m.dispose();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh && o.geometry && !o.geometry.userData.shared) o.geometry.dispose();

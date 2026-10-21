@@ -211,3 +211,63 @@ export class Effects {
     this.smoke.dispose();
   }
 }
+
+/** Marcas de neumático sobre el asfalto (búfer circular de quads instanciados). */
+export class SkidMarks {
+  readonly mesh: THREE.InstancedMesh;
+  private next = 0;
+  private dummy = new THREE.Object3D();
+  private last = new Map<string, { x: number; z: number }>();
+
+  constructor(private count: number) {
+    const geo = new THREE.PlaneGeometry(0.22, 1);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({ color: '#111', transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    this.mesh = new THREE.InstancedMesh(geo, mat, count);
+    this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = 1;
+    // Fuera de la vista hasta que se usen
+    this.dummy.position.set(0, -9999, 0);
+    this.dummy.updateMatrix();
+    for (let i = 0; i < count; i++) this.mesh.setMatrixAt(i, this.dummy.matrix);
+  }
+
+  /** Añade un tramo de marca para la rueda `key` si se ha movido lo suficiente. */
+  mark(key: string, x: number, y: number, z: number): void {
+    const prev = this.last.get(key);
+    if (!prev) {
+      this.last.set(key, { x, z });
+      return;
+    }
+    const dx = x - prev.x;
+    const dz = z - prev.z;
+    const len = Math.hypot(dx, dz);
+    if (len < 0.45) return;
+    if (len > 3) {
+      prev.x = x;
+      prev.z = z;
+      return;
+    }
+    const d = this.dummy;
+    d.position.set((x + prev.x) / 2, y + 0.06, (z + prev.z) / 2);
+    d.rotation.set(0, Math.atan2(dx, dz), 0);
+    d.scale.set(1, 1, len + 0.05);
+    d.updateMatrix();
+    this.mesh.setMatrixAt(this.next, d.matrix);
+    this.next = (this.next + 1) % this.count;
+    this.mesh.instanceMatrix.needsUpdate = true;
+    prev.x = x;
+    prev.z = z;
+  }
+
+  /** La rueda deja de marcar (la siguiente marca empieza de cero). */
+  lift(key: string): void {
+    this.last.delete(key);
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    (this.mesh.material as THREE.Material).dispose();
+    this.mesh.dispose();
+  }
+}

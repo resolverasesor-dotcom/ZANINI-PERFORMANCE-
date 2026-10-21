@@ -4,7 +4,24 @@
 
 export type RunoffSurface = 'grass' | 'gravel' | 'sand' | 'asphalt';
 
-export type ThemeId = 'ring' | 'coast' | 'mountain' | 'night' | 'quarry' | 'gp';
+export type ThemeId = 'ring' | 'coast' | 'mountain' | 'night' | 'quarry' | 'gp' | 'sunset';
+
+/** Serie a la que pertenece el circuito (agrupa la pantalla de selección y los campeonatos). */
+export type SeriesId = 'zanini' | 'costa';
+
+/** Monumentos y elementos singulares del paisaje. */
+export type LandmarkType = 'penon' | 'intempo' | 'church' | 'whitehouses' | 'castle' | 'lighthouse' | 'boats' | 'saltlake' | 'saltpiles' | 'skyline';
+
+export interface Landmark {
+  type: LandmarkType;
+  x: number;
+  z: number;
+  scale?: number;
+  rot?: number;
+  /** Para lagos: semiejes. */
+  rx?: number;
+  rz?: number;
+}
 
 /** Punto de control de la spline central (en metros). y = altura. */
 export interface ControlPoint {
@@ -79,6 +96,8 @@ export interface TrackDef {
   difficulty: 1 | 2 | 3 | 4 | 5;
   decor: DecorRule[];
   scatter: ScatterRule[];
+  series?: SeriesId;
+  landmarks?: Landmark[];
   /** Mar (Costa Blanca): todo lo que quede más allá de esta línea es agua. */
   sea?: { axis: 'x' | 'z'; value: number; dir: 1 | -1 };
 }
