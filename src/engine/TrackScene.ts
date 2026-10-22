@@ -7,6 +7,7 @@ import { makeProto } from './decor';
 import { adTex, ADS } from './ads';
 import { crowdMaterial, flagMaterial, Gulls, seaMaterial } from './ambient';
 import { buildLandmark } from './landmarks';
+import { buildKartVenue, buildTyreBarrier, type VenueParts } from './kartVenue';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
 import {
   asphaltTex,
@@ -71,6 +72,12 @@ export class TrackScene {
   private disposables: { dispose(): void }[] = [];
   private grid: Map<string, number[]> = new Map();
   private readonly cell = 24;
+  private venue: VenueParts | null = null;
+  /** Barrera de neumáticos en lugar de muro de hormigón. */
+  private get tyres(): boolean {
+    const d = this.track.def;
+    return (d.barrier ?? (d.venue === 'karting' ? 'tyres' : 'wall')) === 'tyres';
+  }
 
   constructor(
     readonly track: Track,
@@ -118,7 +125,8 @@ export class TrackScene {
     this.buildGround();
     this.buildRoad();
     this.buildStart();
-    this.buildPits();
+    if (def.venue === 'karting') this.buildVenue();
+    else this.buildPits();
     this.buildDecor();
     this.buildBackdrop();
     this.buildLandmarks();
@@ -318,7 +326,7 @@ export class TrackScene {
     }
     const w = maxX - minX;
     const h = maxZ - minZ;
-    const tex = groundTex(theme).clone();
+    const tex = groundTex(this.track.def.venue === 'karting' ? (theme === 'night' ? 'kartnight' : 'ring') : theme).clone();
     tex.needsUpdate = true;
     tex.repeat.set(w / 16, h / 16);
     this.disposables.push(tex);
@@ -444,7 +452,7 @@ export class TrackScene {
     }
 
     // Vallas de malla sobre los muros (no en montaña ni cantera: guardarraíl)
-    if (theme !== 'mountain' && theme !== 'quarry') {
+    if (theme !== 'mountain' && theme !== 'quarry' && !this.tyres) {
       const tex = fenceTex().clone();
       tex.needsUpdate = true;
       tex.repeat.set(1, 1);
@@ -580,9 +588,19 @@ export class TrackScene {
     const wallMat = this.mat(new THREE.MeshLambertMaterial({ map: wtex, side: THREE.DoubleSide }));
     const yb = (i: number) => t.py[i] - 0.1;
     const yt = (i: number) => t.py[i] + wh;
-    this.wallStrip((i) => -(t.hw[i] + t.runL[i]), yb, yt, wallMat, undefined, 6);
-    this.wallStrip((i) => t.hw[i] + t.runR[i], yb, yt, wallMat, undefined, 6, -1);
-    this.buildWallAds(wh);
+    if (this.tyres) {
+      // Kartódromo: neumáticos apilados; el hormigón queda solo como pretil de los puentes
+      const onBridge = (i: number) => t.bridge[i] === 1;
+      this.wallStrip((i) => -(t.hw[i] + t.runL[i]), yb, yt, wallMat, onBridge, 6);
+      this.wallStrip((i) => t.hw[i] + t.runR[i], yb, yt, wallMat, onBridge, 6, -1);
+      const tb = buildTyreBarrier(t, this.quality, onBridge);
+      this.disposables.push(tb.geometry, tb.material as THREE.Material, tb);
+      this.group.add(tb);
+    } else {
+      this.wallStrip((i) => -(t.hw[i] + t.runL[i]), yb, yt, wallMat, undefined, 6);
+      this.wallStrip((i) => t.hw[i] + t.runR[i], yb, yt, wallMat, undefined, 6, -1);
+      this.buildWallAds(wh);
+    }
     // Terraplenes bajo tramos elevados y puentes
     const raised = (i: number) => t.py[i] - this.groundY > 0.25 && !t.bridge[i];
     if (t.bounds.maxY - t.bounds.minY > 0.5) {
@@ -648,23 +666,25 @@ export class TrackScene {
     g.rotation.y = t.headingAt(0);
     const dark = this.mat(new THREE.MeshLambertMaterial({ color: '#202228' }));
     const span = hw + 1.6;
+    // En un kartódromo el pórtico es más bajo y ligero
+    const H = t.def.venue === 'karting' ? 4.4 : 6.6;
     for (const s of [-1, 1]) {
-      const post = new THREE.Mesh(this.geo(new THREE.BoxGeometry(0.5, 6.6, 0.5)), dark);
-      post.position.set(s * span, 3.3, 0);
+      const post = new THREE.Mesh(this.geo(new THREE.BoxGeometry(0.5, H, 0.5)), dark);
+      post.position.set(s * span, H / 2, 0);
       post.castShadow = true;
       g.add(post);
     }
     const beam = new THREE.Mesh(this.geo(new THREE.BoxGeometry(span * 2 + 0.5, 1.3, 0.6)), dark);
-    beam.position.set(0, 6.2, 0);
+    beam.position.set(0, H - 0.4, 0);
     beam.castShadow = true;
     g.add(beam);
     const bannerBack = new THREE.Mesh(this.geo(new THREE.BoxGeometry(span * 1.6, 1.0, 0.1)), dark);
-    bannerBack.position.set(0, 7.4, 0);
+    bannerBack.position.set(0, H + 0.8, 0);
     g.add(bannerBack);
     for (const face of [-1, 1]) {
       const bt = this.mat(new THREE.MeshBasicMaterial({ map: face < 0 ? bannerTex(0) : adTex(t.def.id.length) }));
       const banner = new THREE.Mesh(this.geo(new THREE.PlaneGeometry(span * 1.6, 1.0)), bt);
-      banner.position.set(0, 7.4, face * 0.07);
+      banner.position.set(0, H + 0.8, face * 0.07);
       banner.rotation.y = face < 0 ? Math.PI : 0;
       g.add(banner);
     }
@@ -672,7 +692,7 @@ export class TrackScene {
     for (let i = 0; i < 5; i++) {
       for (const face of [-1, 1]) {
         const pod = new THREE.Mesh(podGeo, this.lightMatOff);
-        pod.position.set((i - 2) * 0.9, 6.2, face * 0.31);
+        pod.position.set((i - 2) * 0.9, H - 0.4, face * 0.31);
         pod.rotation.y = face > 0 ? 0 : Math.PI;
         g.add(pod);
         this.lightPods.push(pod);
@@ -771,6 +791,15 @@ export class TrackScene {
 
   private pitZone = { s0: 0, s1: 0, side: 1 };
 
+  /** Kartódromo: paddock, club, valla perimetral, focos y comisarios. */
+  private buildVenue(): void {
+    const v = buildKartVenue(this.track, this.groundY, this.quality, this.track.def.theme, this.time, (x, z) => this.clearance(x, z));
+    this.venue = v;
+    this.group.add(v.group);
+    this.disposables.push(...v.disposables);
+    this.pitZone = v.pitZone;
+  }
+
   private inPitZone(s: number, side: number): boolean {
     const L = this.track.length;
     let ss = mod(s, L);
@@ -821,6 +850,7 @@ export class TrackScene {
           const big = rule.type === 'grandstand' || rule.type === 'building' ? 12 : rule.type === 'tree' || rule.type === 'pine' || rule.type === 'palm' ? 3 : 0.3;
           if (this.clearance(p.x, p.z) < big) continue;
           if (this.inSea(p.x, p.z)) continue;
+          if (this.venue?.inPaddock(p.x, p.z)) continue;
           // Orientado hacia la pista
           const dx = side * t.tz[k];
           const dz = -side * t.tx[k];
@@ -850,6 +880,7 @@ export class TrackScene {
         const c = this.clearance(x, z);
         if (c < sc.minDist || (c > sc.maxDist && c !== Infinity)) continue;
         if (this.inSea(x, z)) continue;
+        if (this.venue && (this.venue.inPaddock(x, z) || (sc.type === 'building' && this.venue.inside(x, z)))) continue;
         if (c === Infinity) {
           // celda lejana: aceptar si está dentro del rango por bounding box
           const ddx = Math.max(b.minX - x, 0, x - b.maxX);

@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test:tracks": "tsx scripts/check-tracks.ts track-previews",
     "test:ai": "tsx scripts/sim-races.ts normal",
-    "test:assists": "tsx scripts/sim-assists.ts 0.84"
+    "test:assists": "tsx scripts/sim-assists.ts 0.84",
+    "test:laps": "tsx scripts/lap-times.ts"
   },
   "devDependencies": {
     "@types/three": "0.170.0",

@@ -6,12 +6,14 @@ import { urbano } from './urbano';
 import { cantera } from './cantera';
 import { granPremio } from './granPremio';
 import { altea, benidorm, calpe, denia, torrevieja } from './costaKarting';
+import { elche, finestrat, internacional, nucia, santaPola, xabia } from './kartodromos';
 
 /** Registro de circuitos. */
-export const CIRCUITS: TrackDef[] = [zaniniRing, costaBlanca, montana, urbano, cantera, granPremio, benidorm, calpe, altea, torrevieja, denia];
+export const CIRCUITS: TrackDef[] = [nucia, finestrat, elche, santaPola, xabia, internacional, zaniniRing, costaBlanca, montana, urbano, cantera, granPremio, benidorm, calpe, altea, torrevieja, denia];
 
 /** Calendarios de campeonato (6 GP cada uno). */
 export const SERIES = {
+  kart: { id: 'kart', name: 'Liga de Kartódromos', tracks: ['la-nucia', 'finestrat', 'elche', 'santa-pola', 'xabia', 'internacional'] },
   zanini: { id: 'zanini', name: 'Campeonato Zanini', tracks: ['zanini-ring', 'costa-blanca', 'montana', 'urbano', 'cantera', 'gran-premio'] },
   costa: { id: 'costa', name: 'Copa Costa Blanca', tracks: ['benidorm', 'calpe', 'altea', 'costa-blanca', 'torrevieja', 'denia'] },
 } as const;

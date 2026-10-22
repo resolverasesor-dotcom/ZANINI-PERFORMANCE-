@@ -70,6 +70,7 @@ export function groundTex(theme: string): THREE.Texture {
     coast: [190, 176, 128],
     mountain: [72, 116, 60],
     night: [38, 40, 48],
+    kartnight: [34, 58, 36],
     quarry: [176, 140, 96],
     sunset: [150, 140, 100],
   };

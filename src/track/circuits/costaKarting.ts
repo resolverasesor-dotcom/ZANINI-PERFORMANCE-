@@ -4,7 +4,7 @@ import { rounded, type V } from './helpers';
 // Kartódromos de la Costa Blanca: pistas estrechas, cortas y muy reviradas,
 // cada una con su monumento. Forman la "Copa Costa Blanca".
 
-const kart = { width: 9.5, runoff: 4.5 };
+const kart = { width: 9.5, runoff: 4.5, barrier: 'tyres' as const };
 
 const benidormPoly: V[] = [
   [-150, 0, 0],

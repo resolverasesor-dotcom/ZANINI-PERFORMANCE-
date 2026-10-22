@@ -57,7 +57,7 @@ const MODE_INFO: Record<Mode, { title: string; desc: string; icon: string }> = {
   practice: { title: 'Entrenamientos libres', desc: 'Vueltas ilimitadas, deltas por sector y tu fantasma.', icon: '⏱' },
   timetrial: { title: 'Contrarreloj', desc: 'Bate el récord del circuito contra tu fantasma.', icon: '👻' },
   quick: { title: 'Carrera rápida', desc: 'Elige circuito, vueltas, dificultad y rivales.', icon: '🏁' },
-  weekend: { title: 'Fin de semana', desc: 'Libres, clasificación y carrera.', icon: '📅' },
+  weekend: { title: 'Fin de semana', desc: 'Libres, cronometrados, prefinal y final. Como en karting.', icon: '📅' },
   championship: { title: 'Campeonato', desc: '6 Grandes Premios. ¿Te llevarás el título?', icon: '🏆' },
 };
 
@@ -345,11 +345,13 @@ export class Game {
       </button>`;
     };
     const group = (title: string, list: TrackDef[]) => `<h2 class="series-title">${title}</h2><div class="track-grid">${list.map(card).join('')}</div>`;
+    const kart = CIRCUITS.filter((c) => c.series === 'kart');
     const zanini = CIRCUITS.filter((c) => (c.series ?? 'zanini') === 'zanini');
     const costa = CIRCUITS.filter((c) => c.series === 'costa');
     this.show(
       `<div class="page with-preview">
         <div class="page-head">${this.backBtn()}<h1>${MODE_INFO[mode].title}</h1><div class="page-sub">Elige circuito</div></div>
+        ${group('🏁 Liga de Kartódromos', kart)}
         ${group('🏆 Circuitos Zanini', zanini)}
         ${group('🌴 Kartódromos de la Costa Blanca', costa)}
       </div>`,
@@ -403,7 +405,7 @@ export class Game {
             ${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), diff)}
             ${mode === 'quick' ? this.stepper('Rivales', 'rivals', rivals, `${rivals}`) : ''}
             ${this.drivingFields()}
-            <div class="hint">${mode === 'weekend' ? 'Libres (5 min) → Clasificación (3 min) → Carrera. La parrilla sale por tiempos.' : 'Saldrás desde mitad de parrilla.'} ${diff === 'facil' ? 'En Fácil la IA se reagrupa para que la carrera esté siempre viva.' : ''}</div>
+            <div class="hint">${mode === 'weekend' ? `Libres (5 min) → Cronometrados (3 min) → Prefinal (${Math.max(2, Math.ceil(laps / 2))} v.) → Final. La parrilla de la final sale de la prefinal.` : 'Saldrás desde mitad de parrilla.'} ${diff === 'facil' ? 'En Fácil la IA se reagrupa para que la carrera esté siempre viva.' : ''}</div>
             <button class="btn primary big" data-act="go">¡A correr! ▶</button>
           </div>
         </div>`,
@@ -604,30 +606,43 @@ export class Game {
 
   // ---------------- fin de semana ----------------
   private startWeekend(trackId: string, laps: number, diff: Difficulty): void {
+    // Formato de karting: libres, cronometrados, prefinal (la mitad de vueltas) y final.
+    // La parrilla de la prefinal sale de los cronometrados y la de la final, de la prefinal.
     const def = getCircuit(trackId);
     const entrants = this.allEntrants();
+    const preLaps = Math.max(2, Math.ceil(laps / 2));
     const quali = () =>
       this.runSession(
-        { kind: 'quali', trackId, laps, difficulty: diff, entrants, duration: 180, label: `${def.name} · Clasificación`, mode: 'weekend', canEndSession: true },
+        { kind: 'quali', trackId, laps, difficulty: diff, entrants, duration: 180, label: `${def.name} · Cronometrados`, mode: 'weekend', canEndSession: true },
         (o) => {
           if (o.kind === 'quali') {
             const grid = o.standings.map((r) => r.e);
-            this.showQualiResults(o.standings, `${def.name} · Clasificación`, () => race(grid));
+            this.showQualiResults(o.standings, `${def.name} · Cronometrados`, () => prefinal(grid));
           } else this.showMain();
         },
       );
-    const race = (grid: Entrant[]) =>
+    const prefinal = (grid: Entrant[]) =>
       this.runSession(
-        { kind: 'race', trackId, laps, difficulty: diff, entrants: grid, duration: 0, label: `${def.name} · Carrera`, mode: 'weekend', canEndSession: false },
+        { kind: 'race', trackId, laps: preLaps, difficulty: diff, entrants: grid, duration: 0, label: `${def.name} · Prefinal`, mode: 'weekend', canEndSession: false },
         (o) => {
-          if (o.kind === 'race') this.showResults(o.results, `${def.name} · Carrera`, null, () => this.showMain(), null, undefined, o.stats);
+          if (o.kind === 'race') {
+            const next = o.results.map((r) => r.entrant);
+            this.showResults(o.results, `${def.name} · Prefinal`, null, () => final(next), null, 'A la Final', o.stats);
+          } else this.showMain();
+        },
+      );
+    const final = (grid: Entrant[]) =>
+      this.runSession(
+        { kind: 'race', trackId, laps, difficulty: diff, entrants: grid, duration: 0, label: `${def.name} · Final`, mode: 'weekend', canEndSession: false },
+        (o) => {
+          if (o.kind === 'race') this.showResults(o.results, `${def.name} · Final`, null, () => this.showMain(), null, undefined, o.stats);
           else this.showMain();
         },
       );
     this.runSession(
       { kind: 'practice', trackId, laps, difficulty: diff, entrants: [this.playerEntrant()], duration: 300, label: `${def.name} · Libres`, mode: 'weekend', canEndSession: true },
       (o) => {
-        if (o.kind === 'practice') this.interstitial('LIBRES TERMINADOS', `Tu mejor vuelta: <b>${formatTime(o.best)}</b>`, 'Ir a la clasificación ▶', quali);
+        if (o.kind === 'practice') this.interstitial('LIBRES TERMINADOS', `Tu mejor vuelta: <b>${formatTime(o.best)}</b>`, 'A los cronometrados ▶', quali);
         else this.showMain();
       },
     );
@@ -738,13 +753,13 @@ export class Game {
   private champSetup(): void {
     let diff: Difficulty = this.settings.difficulty;
     let laps = 0;
-    let series: SeriesKey = 'zanini';
+    let series: SeriesKey = 'kart';
     const render = () =>
       this.show(
         `<div class="page narrow">
           <div class="page-head">${this.backBtn()}<h1>Nuevo campeonato</h1><div class="page-sub">6 Grandes Premios · clasificación + carrera</div></div>
           <div class="panel form">
-            ${this.choice('Calendario', 'series', [['zanini', '🏆 Campeonato Zanini'], ['costa', '🌴 Copa Costa Blanca']], series)}
+            ${this.choice('Calendario', 'series', [['kart', '🏁 Liga de Kartódromos'], ['zanini', '🏆 Campeonato Zanini'], ['costa', '🌴 Copa Costa Blanca']], series)}
             <div class="hint">${SERIES[series].tracks.map((id) => esc(getCircuit(id).name)).join(' · ')}</div>
             ${this.choice('Dificultad', 'diff', DIFFICULTIES.map((d) => [d.id, d.label]), diff)}
             ${this.stepper('Vueltas por carrera', 'laps', laps, laps === 0 ? 'Las de cada circuito' : String(laps))}

@@ -1,7 +1,8 @@
 import type { TrackDef } from '../TrackData';
-import { rounded, type V } from './helpers';
+import { rounded, scaleV, type V } from './helpers';
 
-// El más largo y difícil: recta de 550 m, horquilla, eses, chicane y curvas rápidas.
+// El más largo y difícil: recta larga, horquilla, eses, chicane y curvas rápidas.
+// Escalado al 75 % para que la vuelta no pase de un minuto, como en karting.
 const poly: V[] = [
   [-300, 0, 34],
   [290, 0, 13],
@@ -25,14 +26,14 @@ export const granPremio: TrackDef = {
   subtitle: 'El desafío final',
   description: 'El trazado más largo y exigente. Recta enorme, horquilla, eses y chicane.',
   theme: 'gp',
-  points: rounded(poly),
-  width: 12.5,
-  runoff: 8,
+  points: rounded(scaleV(poly, 0.75)),
+  width: 11,
+  runoff: 7,
   surface: 'gravel',
   startAt: 0.0865,
   laps: 3,
-  record: { time: 66.8, holder: 'A. Zanini' },
-  length: 1841,
+  record: { time: 54.2, holder: 'A. Zanini' },
+  length: 1381,
   difficulty: 5,
   decor: [
     { type: 'grandstand', side: 1, every: 34, offset: 5, from: 0.95, to: 0.2 },

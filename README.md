@@ -21,6 +21,7 @@ Pruebas automáticas (sin navegador):
 
 ```bash
 npm run test:tracks   # valida los circuitos (solapes, radios, recta de salida)
+npm run test:laps     # tiempos de vuelta por cilindrada (ninguno pasa de 1:20)
 npm run test:ai       # 12 IA corren una carrera en cada circuito: nadie se atasca ni atraviesa muros
 npm run test:assists  # comprueba que las ayudas mantienen en pista a un jugador torpe
 ```
@@ -34,9 +35,9 @@ Elige un modo en el menú principal:
 | **Entrenamientos libres** | Vueltas ilimitadas, deltas por sector (verde = tu mejor, morado = el mejor absoluto) y el fantasma de tu mejor vuelta. |
 | **Contrarreloj** | Bate el récord del circuito contra tu fantasma. El récord y el fantasma se guardan. |
 | **Carrera rápida** | Circuito, vueltas, dificultad y número de rivales a tu gusto. |
-| **Fin de semana** | Libres (5 min) → Clasificación (3 min) → Carrera. La parrilla sale por tiempos. |
+| **Fin de semana** | Formato de karting: Libres (5 min) → Cronometrados (3 min) → **Prefinal** (la mitad de vueltas) → **Final**. La parrilla de la prefinal sale de los cronometrados y la de la final, del resultado de la prefinal. |
 | **Tutorial** | 20 segundos como máximo: acelerar, girar, derrapar y mini-turbo. Se ofrece la primera vez. |
-| **Campeonato** | 6 Grandes Premios, cada uno con clasificación y carrera. Puntos 25-18-15-12-10-8-6-4-2-1 y +1 por vuelta rápida si acabas en el top 10. Se guarda tras cada sesión: puedes cerrar el navegador y continuar. Dos calendarios: **Campeonato Zanini** y **Copa Costa Blanca**. |
+| **Campeonato** | 6 Grandes Premios, cada uno con clasificación y carrera. Puntos 25-18-15-12-10-8-6-4-2-1 y +1 por vuelta rápida si acabas en el top 10. Se guarda tras cada sesión: puedes cerrar el navegador y continuar. Tres calendarios: **Liga de Kartódromos**, **Campeonato Zanini** y **Copa Costa Blanca**. |
 
 Reglas:
 
@@ -56,9 +57,29 @@ Consejos para ir rápido:
 
 ## Circuitos
 
+Ninguna vuelta pasa de 1:20, como en karting real: casi todos se dan en 35–55 s
+(`npm run test:laps` lo comprueba en las tres cilindradas).
+
+**Liga de Kartódromos** (instalaciones de karting de verdad, pequeñas y «ratoneras»: pista de 8–9 m,
+tramos paralelos separados solo por hierba y neumáticos, horquillas y rectas cortas):
+
+| Kartódromo | Longitud | Vuelta | Carácter |
+| --- | --- | --- | --- |
+| La Nucía | 825 m | ~45 s | El ratonero: ángulos de 90° y horquillas |
+| Finestrat | 862 m | ~41 s | Ocho con puente sobre el trazado, subidas y bajadas |
+| Elche · Palmeral | 1.090 m | ~46 s | El más rápido, curvas enlazadas entre palmeras |
+| Santa Pola | 681 m | ~39 s | Nocturna bajo focos, el más corto y revirado |
+| Xàbia · Montgó | 817 m | ~44 s | Técnico, con chicane final |
+| Internacional Zanini | 1.158 m | ~52 s | Homologado, recta larga y pista de 9 m |
+
+Cada kartódromo tiene **barrera de neumáticos** (negros en recta, rojos y blancos en curva), valla
+perimetral con publicidad, **paddock** con carpas de equipo y karts en sus caballetes, furgonetas,
+edificio del club con terraza y público, torre de tiempos, grada pequeña, **torres de focos**,
+comisarios con bandera amarilla en las curvas y una arboleda que cierra el recinto.
+
 **Circuitos Zanini:** Zanini Ring, Costa Blanca, Montaña (ocho con puente), Urbano Nocturno, Cantera y Gran Premio Zanini.
 
-**Kartódromos de la Costa Blanca** (estrechos y revirados, con su monumento):
+**Kartódromos de la Costa Blanca** (estrechos y revirados, con su monumento y barrera de neumáticos):
 Benidorm (rascacielos e Intempo), Calpe (Peñón de Ifach), Altea (atardecer y cúpula azul),
 Torrevieja (lagunas rosas y montañas de sal) y Dénia (puerto, castillo y faro).
 

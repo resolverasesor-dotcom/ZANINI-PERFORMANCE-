@@ -6,7 +6,7 @@ import { adTex } from './ads';
 
 // Prototipos low-poly de la decoración (se dibujan con InstancedMesh).
 
-function part(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, m: THREE.Matrix4, keepUV = false): THREE.BufferGeometry {
+export function part(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, m: THREE.Matrix4, keepUV = false): THREE.BufferGeometry {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
   g.applyMatrix4(m);
   g.deleteAttribute('normal');
@@ -27,7 +27,7 @@ function part(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, m: TH
   return g;
 }
 
-const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 =>
+export const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
 
 export interface DecorProto {

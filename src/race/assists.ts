@@ -47,10 +47,16 @@ export class DriverAssist {
       if (strong) pi.steer = user < 0.15 ? sc.steer : clamp(pi.steer * 0.6 + sc.steer * 0.4, -1, 1);
       else pi.steer = clamp(pi.steer * 0.8 + sc.steer * 0.2, -1, 1);
     }
-    // Red de seguridad anti-salida (ambos niveles)
-    this.antiOff(pi, strong);
+    // Red de seguridad anti-salida (si conduce el copiloto no hace falta: ya va por la trazada,
+    // y en pistas de karting de 8 m la red le estorbaría al usar todo el ancho)
+    if (!(strong && user < 0.15)) this.antiOff(pi, strong);
     // Frenada automática antes de las curvas
     if (!k.drifting && pi.brake < 0.1) {
+      // Máxima: el pedal lo lleva el copiloto (en los kartódromos estrechos hace falta su precisión)
+      if (strong) {
+        pi.throttle = Math.min(pi.throttle, sc.throttle);
+        pi.brake = Math.max(pi.brake, sc.brake);
+      }
       const target = this.track.sample(this.track.lineSpeed, k.proj.s + v * 0.45 + 3) * this.copilot.speedFactor * (strong ? 1.02 : 1.07);
       if (v > target + 0.4) {
         pi.throttle = 0;
