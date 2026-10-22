@@ -65,7 +65,7 @@ export const KART = {
   /** Saltito: duración, recarga y ganancia de tracción. */
   hopTime: 0.3,
   hopCool: 0.7,
-  hopGain: 0.16,
+  hopGain: 0.28,
   /** Valores derivados para la IA y la línea de carrera. */
   aLat: 15.5,
   R0: 2.5,
