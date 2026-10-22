@@ -6,7 +6,7 @@ import { el } from './dom';
  * Controles táctiles pensados para el pulgar:
  *  - Izquierda: barra de dirección ANALÓGICA. Pones el dedo y lo deslizas: cuanto más
  *    lejos del centro, más giras. (Opcional: flechas clásicas.)
- *  - Derecha: DERRAPE (botón principal), FRENO y ACEL (solo si no hay aceleración automática).
+ *  - Derecha: SALTITO (descargar peso; también acelera), FRENO y ACEL (solo si no hay aceleración automática).
  *  - Arriba: reaparecer y pausa.
  * Multitáctil con captura de puntero: el dedo puede salirse del control sin soltarlo.
  */
@@ -52,7 +52,7 @@ export class TouchControls {
     this.root.innerHTML = `
       <div class="tzone tleft">${left}</div>
       <div class="tzone tright">
-        <button class="tbtn tdrift" data-k="drift" aria-label="Derrapar">DERRAPE</button>
+        <button class="tbtn tdrift" data-k="hop" aria-label="Saltito: descargar peso del asiento">SALTITO</button>
         ${mode === 'inclinar' ? '' : '<button class="tbtn tbrake" data-k="brake" aria-label="Frenar">FRENO</button>'}
         ${auto ? '' : '<button class="tbtn taccel" data-k="accel" aria-label="Acelerar">ACEL</button>'}
       </div>
@@ -140,7 +140,7 @@ export class TouchControls {
     }
     const k = t.dataset.k ?? null;
     if (k) this.active.set(e.pointerId, k);
-    if (navigator.vibrate && this.settings().vibration && k === 'drift') navigator.vibrate(12);
+    if (navigator.vibrate && this.settings().vibration && k === 'hop') navigator.vibrate(12);
     this.sync();
   }
 
@@ -153,15 +153,15 @@ export class TouchControls {
     if (!this.active.has(e.pointerId)) return;
     e.preventDefault();
     const prev = this.active.get(e.pointerId)!;
-    // Se puede deslizar el dedo entre flechas, y entre ACEL y DERRAPE sin levantarlo
-    const groups = [['left', 'right'], ['accel', 'drift']];
+    // Se puede deslizar el dedo entre flechas, y entre ACEL y SALTITO sin levantarlo
+    const groups = [['left', 'right'], ['accel', 'hop']];
     const g = groups.find((x) => x.includes(prev));
     if (!g) return;
     const b = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest('[data-k]') as HTMLElement | null;
     const k = b?.dataset.k;
     if (k && g.includes(k) && k !== prev) {
       this.active.set(e.pointerId, k);
-      if (k === 'drift' && navigator.vibrate && this.settings().vibration) navigator.vibrate(10);
+      if (k === 'hop' && navigator.vibrate && this.settings().vibration) navigator.vibrate(10);
       this.sync();
     }
   }
@@ -180,13 +180,13 @@ export class TouchControls {
 
   private sync(): void {
     const t = this.input.touch;
-    t.left = t.right = t.accel = t.brake = t.drift = false;
+    t.left = t.right = t.accel = t.brake = t.hop = false;
     for (const k of this.active.values()) {
       if (k === 'left') t.left = true;
       if (k === 'right') t.right = true;
       if (k === 'accel') t.accel = true;
       if (k === 'brake') t.brake = true;
-      if (k === 'drift') t.drift = true;
+      if (k === 'hop') t.hop = true;
     }
     const on = new Set(this.active.values());
     this.root.querySelectorAll('[data-k]').forEach((b) => b.classList.toggle('down', on.has((b as HTMLElement).dataset.k!)));

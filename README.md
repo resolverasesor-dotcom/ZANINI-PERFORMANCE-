@@ -36,7 +36,7 @@ Elige un modo en el menú principal:
 | **Contrarreloj** | Bate el récord del circuito contra tu fantasma. El récord y el fantasma se guardan. |
 | **Carrera rápida** | Circuito, vueltas, dificultad y número de rivales a tu gusto. |
 | **Fin de semana** | Formato de karting: Libres (5 min) → Cronometrados (3 min) → **Prefinal** (la mitad de vueltas) → **Final**. La parrilla de la prefinal sale de los cronometrados y la de la final, del resultado de la prefinal. |
-| **Tutorial** | 20 segundos como máximo: acelerar, girar, derrapar y mini-turbo. Se ofrece la primera vez. |
+| **Tutorial** | 20 segundos como máximo: acelerar, girar, dejar rodar el kart y el saltito. Se ofrece la primera vez. |
 | **Campeonato** | 6 Grandes Premios, cada uno con clasificación y carrera. Puntos 25-18-15-12-10-8-6-4-2-1 y +1 por vuelta rápida si acabas en el top 10. Se guarda tras cada sesión: puedes cerrar el navegador y continuar. Tres calendarios: **Liga de Kartódromos**, **Campeonato Zanini** y **Copa Costa Blanca**. |
 
 Reglas:
@@ -47,17 +47,43 @@ Reglas:
 
 Consejos para ir rápido:
 
-- El botón de derrape sin girar actúa como **freno de mano** (frena la zaga y la hace deslizar).
-- **Derrapa** en las curvas: mantén el botón de derrape mientras giras. Las chispas pasan de
-  blanco a **azul** (mini-turbo nivel 1) y a **naranja** (nivel 2). Suelta para salir disparada/o.
-  Girar hacia dentro del derrape lo carga más rápido.
+- **Frena lo mínimo.** Un kart pesa poco y apenas se frena al soltar el gas (unos 0,25 g), pero
+  cuesta mucho que vuelva a coger velocidad (0-100 km/h en ~6,5 s). Conserva la inercia.
+- **El derrape no es un botón**: sale solo cuando superas el agarre, por ejemplo al entrar pasado o al
+  frenar girando (la zaga se descarga y se suelta). Un poco de deslizamiento es rápido; mucho, lento.
+  El marcador muestra el ángulo: verde (bien), amarillo, rojo (te estás pasando). Contravolantea.
+- **Saltito** (Espacio / RB / botón SALTITO): como hacen los pilotos de verdad, te levantas un instante del
+  asiento para descargar peso. El eje trasero rígido deja de "clavarse" en las curvas lentas y el kart sale
+  con más fuerza. Úsalo acelerando a la salida de las horquillas; cuando el eje está clavado, el
+  marcador avisa con **⇡ SALTITO**. No sirve de nada en recta ni a fondo, y hay que esperar un instante
+  entre saltito y saltito.
 - Ponte detrás de otro kart en recta para coger **rebufo**.
 - La hierba, la grava y la arena frenan mucho. Los pianos no.
 - Si te quedas atascado, pulsa **reaparecer**.
 
+## Física del kart
+
+No es física arcade: es un modelo de vehículo de dos ejes ("bicicleta") integrado a 480 Hz,
+con los valores de un kart de 125 cc con piloto (165 kg, batalla 1,04 m).
+
+- **Neumáticos** con curva de fórmula mágica: el agarre crece con el ángulo de deriva hasta ~6° y
+  luego cae. Por eso el derrape aparece solo cuando un eje pasa del pico, y se recupera contravolanteando.
+- **Transferencia de carga**: al frenar el peso va delante y la zaga se suelta; al acelerar, al revés.
+  El agarre depende de la carga (un neumático muy cargado rinde proporcionalmente menos).
+- **Eje trasero rígido**: en curva la rueda interior tiene que patinar, lo que frena el kart y
+  hace que gire peor en las curvas lentas. El **saltito** lo alivia, como en la realidad.
+- **Motor limitado por potencia** (~15 kW): empuja fuerte desde parado y cada vez menos arriba.
+  Resistencia aerodinámica, rodadura y freno motor de transmisión directa: soltar el gas apenas frena.
+- **Frenos** con reparto delante/detrás (~1,2 g a fondo en recta).
+- **Dirección progresiva**: a alta velocidad las ruedas giran muy poco (como en un kart real), con
+  recorrido extra para contravolantear.
+
+`npm run test:physics` mide aceleración, inercia, frenada, agarre lateral, respuesta a un volantazo,
+frenar girando y el efecto del saltito.
+
 ## Circuitos
 
-Ninguna vuelta pasa de 1:20, como en karting real: casi todos se dan en 35–55 s
+Ninguna vuelta pasa de 1:20, como en karting real: casi todos se dan en 35–60 s
 (`npm run test:laps` lo comprueba en las tres cilindradas).
 
 **Liga de Kartódromos** (instalaciones de karting de verdad, pequeñas y «ratoneras»: pista de 8–9 m,
@@ -65,12 +91,12 @@ tramos paralelos separados solo por hierba y neumáticos, horquillas y rectas co
 
 | Kartódromo | Longitud | Vuelta | Carácter |
 | --- | --- | --- | --- |
-| La Nucía | 825 m | ~45 s | El ratonero: ángulos de 90° y horquillas |
-| Finestrat | 862 m | ~41 s | Ocho con puente sobre el trazado, subidas y bajadas |
-| Elche · Palmeral | 1.090 m | ~46 s | El más rápido, curvas enlazadas entre palmeras |
-| Santa Pola | 681 m | ~39 s | Nocturna bajo focos, el más corto y revirado |
-| Xàbia · Montgó | 817 m | ~44 s | Técnico, con chicane final |
-| Internacional Zanini | 1.158 m | ~52 s | Homologado, recta larga y pista de 9 m |
+| La Nucía | 825 m | ~48 s | El ratonero: ángulos de 90° y horquillas |
+| Finestrat | 862 m | ~45 s | Ocho con puente sobre el trazado, subidas y bajadas |
+| Elche · Palmeral | 1.090 m | ~50 s | El más rápido, curvas enlazadas entre palmeras |
+| Santa Pola | 681 m | ~42 s | Nocturna bajo focos, el más corto y revirado |
+| Xàbia · Montgó | 817 m | ~47 s | Técnico, con chicane final |
+| Internacional Zanini | 1.158 m | ~57 s | Homologado, recta larga y pista de 9 m |
 
 Cada kartódromo tiene **barrera de neumáticos** (negros en recta, rojos y blancos en curva), valla
 perimetral con publicidad, **paddock** con carpas de equipo y karts en sus caballetes, furgonetas,
@@ -95,7 +121,7 @@ récords y medallas de contrarreloj.
 
 Al cruzar la meta hay una **repetición** de los últimos segundos con cámaras de TV (se puede saltar).
 Los resultados incluyen un **gráfico de posiciones vuelta a vuelta** y un resumen: ganador, vuelta rápida,
-mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapando… y besos al muro).
+mayor remontada, más adelantamientos y tus datos (saltitos, tiempo derrapando… y besos al muro).
 
 ## Controles
 
@@ -104,7 +130,7 @@ mayor remontada, más adelantamientos y tus datos (mini-turbos, tiempo derrapand
 | Acelerar | ↑ / W | RT o A | ACEL |
 | Frenar / marcha atrás | ↓ / S | LT o X | FRENO |
 | Girar | ← → / A D | Stick izquierdo o cruceta | ◀ ▶ |
-| Derrapar / freno de mano | Espacio / Mayús | RB, LB o B | DERRAPE |
+| Saltito (descargar peso) | Espacio / Mayús | RB, LB o B | SALTITO |
 | Reaparecer | R | Y | ↺ |
 | Cambiar cámara | C | Select | (en pausa) |
 | Pausa | Esc / P | Start | ❚❚ |
@@ -113,7 +139,7 @@ Las teclas se pueden **reasignar** en *Ajustes → Controles*. Los menús se man
 flechas o con el mando (A aceptar, B volver). En móvil los controles táctiles aparecen solos
 (se pueden forzar o quitar en Ajustes). A la izquierda, la **barra de dirección analógica**: pon el dedo
 y deslízalo (cuanto más lejos del centro, más giras). También hay flechas o **inclinar el móvil**.
-A la derecha, el racimo del pulgar: **ACEL** grande en la esquina, **DERRAPE** encima (también acelera:
+A la derecha, el racimo del pulgar: **ACEL** grande en la esquina, **SALTITO** encima (también acelera:
 puedes deslizar el pulgar de uno a otro sin soltar) y **FRENO** al lado. La aceleración automática es
 opcional (desactivada por defecto; se cambia en Ajustes o en la pausa). Mejor en horizontal.
 
@@ -195,7 +221,8 @@ grandstand, tyres, banner, cone, crate, promenade`. `sea` añade mar (ver `costa
 src/
   core/      utilidades, entrada (teclado/mando/táctil), ajustes, guardado
   track/     circuitos como datos + Track (muestreo de la spline, proyecciones)
-  physics/   física arcade del kart (derrape, turbo, rebufo, colisiones, muros)
+  physics/   física del kart: modelo de bicicleta con neumáticos no lineales, transferencia de
+             carga, eje trasero rígido, motor limitado por potencia, rebufo, colisiones
   ai/        pilotos, línea de carrera y conductor IA
   race/      simulación de sesión y reglamento, fantasma/récords, campeonato
   engine/    render: escena del circuito, kart low-poly, partículas, cámara, texturas

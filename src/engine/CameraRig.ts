@@ -27,7 +27,7 @@ export class CameraRig {
 
   /**
    * Sigue al objetivo. yaw = rumbo del kart, velYaw = rumbo de la velocidad
-   * (al derrapar la cámara se queda entre ambos y se aprecia el ángulo).
+   * (al deslizar la cámara se queda entre ambos y se aprecia el ángulo).
    */
   follow(dt: number, x: number, y: number, z: number, yaw: number, velYaw: number, speedRatio: number, boost: boolean, slope: number): void {
     const cam = this.camera;

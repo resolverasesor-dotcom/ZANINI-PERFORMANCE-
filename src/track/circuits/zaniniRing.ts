@@ -22,7 +22,7 @@ export const zaniniRing: TrackDef = {
   id: 'zanini-ring',
   name: 'Zanini Ring',
   subtitle: 'Iniciación',
-  description: 'Corto y técnico. El circuito de casa, perfecto para aprender a derrapar.',
+  description: 'Corto y técnico. El circuito de casa, perfecto para aprender a llevar un kart.',
   theme: 'ring',
   points: rounded(scaleV(poly, 1.25)),
   width: 12,
@@ -30,7 +30,7 @@ export const zaniniRing: TrackDef = {
   surface: 'grass',
   startAt: 0.1636,
   laps: 5,
-  record: { time: 31.7, holder: 'M. Zanini' },
+  record: { time: 35.0, holder: 'M. Zanini' },
   length: 792,
   difficulty: 1,
   decor: [

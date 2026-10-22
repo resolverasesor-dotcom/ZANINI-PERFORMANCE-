@@ -271,15 +271,10 @@ export class AudioEngine {
     this.tone(990, 0.6, 'triangle', 0.15);
   }
 
-  boost(level: number): void {
-    this.noiseBurst(0.5 + level * 0.2, 0.35, 2400, 'bandpass');
-    this.tone(220, 0.45, 'sawtooth', 0.12, 0, 660 + level * 220);
-  }
-
-  driftLevel(level: number): void {
-    const base = level === 2 ? 1046 : 784;
-    this.tone(base, 0.12, 'square', 0.08);
-    this.tone(base * 1.5, 0.16, 'square', 0.06, 0.07);
+  /** Saltito: golpe sordo del asiento y del chasis. */
+  hop(): void {
+    this.tone(95, 0.12, 'sine', 0.22, 0, 60);
+    this.noiseBurst(0.08, 0.12, 600, 'lowpass');
   }
 
   click(): void {

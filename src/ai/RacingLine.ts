@@ -72,7 +72,8 @@ export function computeRacingLine(track: Track): void {
   // Perfil de velocidad: límite por curva y frenada hacia atrás (dos pasadas por el cierre).
   const v = track.lineSpeed;
   for (let i = 0; i < n; i++) v[i] = cornerSpeed(track.lineCurv[i]);
-  const decel = 15;
+  // Frenada realista de kart (~1 g con margen para trazar mientras se frena)
+  const decel = 9.5;
   for (let pass = 0; pass < 2; pass++) {
     for (let i = n - 1; i >= 0; i--) {
       const next = v[(i + 1) % n];

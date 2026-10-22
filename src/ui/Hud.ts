@@ -170,15 +170,23 @@ export class Hud {
     this.leds.classList.toggle('flash', boost || ratio > 0.97);
   }
 
-  setDrift(level: number, charge: number, drifting: boolean): void {
-    if (!drifting) {
+  /**
+   * Indicador de agarre: ángulo del derrape cuando la zaga desliza (verde si es
+   * poco, rojo si te estás pasando) y aviso de saltito cuando el eje está clavado.
+   */
+  setGrip(slideAngle: number, hopHint: boolean): void {
+    const deg = Math.round(slideAngle * 57.3);
+    if (deg >= 3) {
+      const lvl = deg < 10 ? 'g' : deg < 20 ? 'y' : 'r';
+      this.driftEl.className = 'hud-drift on ' + lvl;
+      this.driftEl.innerHTML = `<span>DERRAPE ${deg}°</span><i style="width:${Math.min(100, (deg / 30) * 100)}%"></i>`;
+    } else if (hopHint) {
+      this.driftEl.className = 'hud-drift on hop';
+      this.driftEl.innerHTML = '<span>⇡ SALTITO</span>';
+    } else {
       this.driftEl.className = 'hud-drift';
       this.driftEl.textContent = '';
-      return;
     }
-    this.driftEl.className = 'hud-drift on l' + level;
-    const pct = Math.min(100, (charge / 2.05) * 100);
-    this.driftEl.innerHTML = `<span>DERRAPE${level ? ' ' + 'I'.repeat(level) : ''}</span><i style="width:${pct}%"></i>`;
   }
 
   setTower(rows: TowerRow[]): void {

@@ -34,7 +34,7 @@ export const montana: TrackDef = {
   surface: 'grass',
   startAt: 0.5245,
   laps: 4,
-  record: { time: 44.9, holder: 'K. Brenner' },
+  record: { time: 49.8, holder: 'K. Brenner' },
   length: 1157,
   difficulty: 3,
   decor: [

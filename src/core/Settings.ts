@@ -20,14 +20,14 @@ export const ASSIST_LABELS: Record<AssistLevel, string> = {
   maxima: 'Ayuda máxima',
 };
 
-export type Action = 'accel' | 'brake' | 'left' | 'right' | 'drift' | 'respawn' | 'camera' | 'pause';
+export type Action = 'accel' | 'brake' | 'left' | 'right' | 'hop' | 'respawn' | 'camera' | 'pause';
 
 export const ACTION_LABELS: Record<Action, string> = {
   accel: 'Acelerar',
   brake: 'Frenar / marcha atrás',
   left: 'Girar a la izquierda',
   right: 'Girar a la derecha',
-  drift: 'Derrapar',
+  hop: 'Saltito (descargar peso)',
   respawn: 'Reaparecer',
   camera: 'Cambiar cámara',
   pause: 'Pausa',
@@ -38,7 +38,7 @@ export const DEFAULT_KEYS: Record<Action, string[]> = {
   brake: ['ArrowDown', 'KeyS'],
   left: ['ArrowLeft', 'KeyA'],
   right: ['ArrowRight', 'KeyD'],
-  drift: ['Space', 'ShiftLeft'],
+  hop: ['Space', 'ShiftLeft'],
   respawn: ['KeyR'],
   camera: ['KeyC'],
   pause: ['Escape', 'KeyP'],
@@ -111,6 +111,10 @@ export function defaultSettings(): Settings {
 
 export function loadSettings(): Settings {
   const s = { ...defaultSettings(), ...load<Partial<Settings>>('settings', {}) };
+  // El antiguo botón de derrape pasa a ser el saltito (mismas teclas)
+  const old = s.keys as Partial<Record<string, string[]>> | undefined;
+  if (old?.drift && !old.hop) old.hop = old.drift;
+  if (old) delete old.drift;
   s.keys = { ...DEFAULT_KEYS, ...s.keys };
   // Migración: nuevos controles táctiles (dirección analógica y aceleración automática en móvil)
   // Migración v3: la aceleración automática vuelve a ser opcional (desactivada) y en

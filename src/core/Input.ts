@@ -5,7 +5,7 @@ export interface ControlState {
   steer: number;
   throttle: number;
   brake: number;
-  drift: boolean;
+  hop: boolean;
   respawn: boolean;
   camera: boolean;
   pause: boolean;
@@ -21,7 +21,7 @@ export class Input {
   private padEdges = new Set<number>();
   private padAxisPrev = { x: 0, y: 0 };
   /** Estado táctil (lo rellena TouchControls). */
-  touch = { left: false, right: false, accel: false, brake: false, drift: false, respawn: false, pause: false, steerAxis: 0 };
+  touch = { left: false, right: false, accel: false, brake: false, hop: false, respawn: false, pause: false, steerAxis: 0 };
   private touchEdges = { respawn: false, pause: false };
   /** Si se asigna, la siguiente tecla pulsada se entrega aquí (reasignar controles). */
   captureNext: ((code: string) => void) | null = null;
@@ -37,7 +37,7 @@ export class Input {
     steer: 0,
     throttle: 0,
     brake: 0,
-    drift: false,
+    hop: false,
     respawn: false,
     camera: false,
     pause: false,
@@ -93,7 +93,7 @@ export class Input {
     let steer = (this.key('right') ? 1 : 0) - (this.key('left') ? 1 : 0);
     let throttle = this.key('accel') ? 1 : 0;
     let brake = this.key('brake') ? 1 : 0;
-    let drift = this.key('drift');
+    let hop = this.key('hop');
     let respawn = this.keyEdge('respawn');
     let camera = this.keyEdge('camera');
     let pause = this.keyEdge('pause');
@@ -132,7 +132,7 @@ export class Input {
       if (b(15)) steer = 1;
       throttle = Math.max(throttle, bv(7), b(0) ? 1 : 0);
       brake = Math.max(brake, bv(6), b(2) ? 1 : 0);
-      drift = drift || b(5) || b(4) || b(1);
+      hop = hop || b(5) || b(4) || b(1);
       respawn = respawn || this.padEdges.has(3);
       camera = camera || this.padEdges.has(8);
       pause = pause || this.padEdges.has(9);
@@ -149,14 +149,14 @@ export class Input {
 
     // Táctil
     const t = this.touch;
-    if (t.left || t.right || t.accel || t.brake || t.drift || t.steerAxis !== 0) {
+    if (t.left || t.right || t.accel || t.brake || t.hop || t.steerAxis !== 0) {
       if (t.steerAxis !== 0) steer = t.steerAxis;
       else if (t.left || t.right) steer = (t.right ? 1 : 0) - (t.left ? 1 : 0);
       if (t.accel) throttle = 1;
       if (t.brake) brake = 1;
-      drift = drift || t.drift;
-      // En táctil, derrapar también acelera: no hace falta soltar el gas con el pulgar
-      if (t.drift && !t.brake) throttle = 1;
+      hop = hop || t.hop;
+      // En táctil, el saltito se da acelerando: no hace falta mantener ACEL a la vez
+      if (t.hop && !t.brake) throttle = 1;
     }
     if (this.autoAccelActive && !t.brake) throttle = 1;
     respawn = respawn || this.touchEdges.respawn;
@@ -167,7 +167,7 @@ export class Input {
     s.steer = Math.max(-1, Math.min(1, steer));
     s.throttle = throttle;
     s.brake = brake;
-    s.drift = drift;
+    s.hop = hop;
     s.respawn = respawn;
     s.camera = camera;
     s.pause = pause;

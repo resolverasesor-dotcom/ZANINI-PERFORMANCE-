@@ -38,7 +38,7 @@ for (const def of CIRCUITS) {
       maxOut = Math.max(maxOut, out);
       if (c.kart.wallImpact > 3) wallHits++;
       if (c.kart.kartImpact > 2) kartHits++;
-      if (c.kart.events.includes('driftStart')) drifts++;
+      if (c.kart.events.includes("slideStart")) drifts++;
     }
     sim.events.length = 0;
     steps++;

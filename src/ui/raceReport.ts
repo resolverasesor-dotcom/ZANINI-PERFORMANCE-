@@ -52,7 +52,7 @@ export function raceSummary(results: RaceResultRow[], stats: PlayerStats | null)
     const parts = [
       `Salida P${me.grid} → meta P${me.position}${gained > 0 ? ` (+${gained})` : ''}`,
       `${me.overtakes} adelantamientos`,
-      stats ? `${stats.boosts} mini-turbos` : '',
+      stats ? `${stats.hops} saltitos` : '',
       stats ? `${stats.driftTime.toFixed(1)} s derrapando` : '',
       stats ? `punta ${Math.round(stats.topSpeed)} km/h` : '',
       stats ? (stats.wallHits === 0 ? 'cero besos al muro 😇' : `${stats.wallHits} ${stats.wallHits === 1 ? 'beso' : 'besos'} al muro 💋`) : '',

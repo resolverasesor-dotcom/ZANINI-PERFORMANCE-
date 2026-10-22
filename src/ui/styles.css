@@ -957,13 +957,27 @@ table.results {
   background: #fff;
   opacity: 0.35;
 }
-.hud-drift.l1 i {
-  background: #3a8bff;
+.hud-drift.g i {
+  background: #2ecc71;
   opacity: 0.9;
 }
-.hud-drift.l2 i {
-  background: #ff8a1a;
+.hud-drift.y i {
+  background: #ffc300;
   opacity: 0.95;
+}
+.hud-drift.r i {
+  background: #ff3b2f;
+  opacity: 0.95;
+}
+.hud-drift.hop {
+  background: rgba(255, 195, 0, 0.85);
+  color: #111;
+  animation: hopPulse 0.7s ease-in-out infinite;
+}
+@keyframes hopPulse {
+  50% {
+    transform: skewX(-12deg) translateY(-3px);
+  }
 }
 .hud-map {
   position: absolute;
@@ -1891,7 +1905,7 @@ table.results {
 .touch .tright .taccel {
   grid-area: accel;
 }
-/* Sin ACEL (aceleración automática): DERRAPE baja a la esquina */
+/* Sin ACEL (aceleración automática): SALTITO baja a la esquina */
 .touch.auto .tright {
   grid-template-areas: 'brake drift';
   grid-template-rows: auto;

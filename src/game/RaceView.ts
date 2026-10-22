@@ -73,7 +73,7 @@ const STEP = 1 / 120;
 /** Datos curiosos de la carrera del jugador para el resumen. */
 export interface PlayerStats {
   wallHits: number;
-  boosts: number;
+  hops: number;
   topSpeed: number;
   driftTime: number;
 }
@@ -125,31 +125,28 @@ class KartView {
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;
     r.rotation.x = damp(r.rotation.x, -Math.atan(slope * along), 10, dt);
     const b = this.mesh.body;
-    b.rotation.y = k.driftVisual;
+    b.rotation.y = 0;
     const roll = clamp(-k.yawRate * Math.max(0, k.vF) * 0.012, -0.12, 0.12);
     b.rotation.z = damp(b.rotation.z, roll, 8, dt);
-    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.18 : 0) + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
+    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
     for (const p of this.mesh.frontPivots) p.rotation.y = -k.steer * 0.45;
     // Piloto: volante, cabeza que mira e inclina hacia la curva
     this.mesh.steering.rotation.z = k.steer * 1.4;
     const m = this.mesh.helmet;
-    m.rotation.y = damp(m.rotation.y, -k.steer * 0.3 + k.driftVisual * 0.4, 8, dt);
+    // Al derrapar el piloto mira hacia donde va el kart (contra el ángulo de deriva)
+    m.rotation.y = damp(m.rotation.y, -k.steer * 0.3 + clamp(Math.atan2(k.vL, Math.max(2, k.vF)), -0.6, 0.6) * 0.8, 8, dt);
+    // En el saltito el piloto se levanta del asiento
+    m.position.y = 1.0 + (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.12 : 0);
     m.rotation.z = damp(m.rotation.z, roll * 2.6, 8, dt);
     // Luz de freno
     if (this.mesh.brakeMat) {
-      const braking = (this.comp.input.brake > 0.1 && k.vF > 1) || k.handbrake;
+      const braking = this.comp.input.brake > 0.1 && k.vF > 1;
       this.mesh.brakeMat.color.setRGB(braking ? 6 : 0.25, braking ? 0.35 : 0.02, braking ? 0.25 : 0.02);
     }
     this.spin += (k.vF * dt) / 0.16;
     for (const w of this.mesh.wheels) w.rotation.x = this.spin;
     wavePennant(this.mesh, performance.now() / 1000, Math.abs(k.vF));
-    const fl = this.mesh.flame;
-    fl.visible = k.boostTime > 0;
-    if (fl.visible) {
-      const s = 0.8 + Math.random() * 0.6;
-      fl.scale.set(s, s * (k.boostLevel === 2 ? 1.6 : 1.1), s);
-      (fl.material as THREE.MeshBasicMaterial).color.set(k.boostLevel === 2 ? '#ff9a1f' : '#4aa8ff');
-    }
+    this.mesh.flame.visible = false;
   }
 }
 
@@ -162,7 +159,7 @@ export class RaceView {
   private views: KartView[] = [];
   private effects: Effects;
   private tutorial: Tutorial | null = null;
-  private stats: PlayerStats = { wallHits: 0, boosts: 0, topSpeed: 0, driftTime: 0 };
+  private stats: PlayerStats = { wallHits: 0, hops: 0, topSpeed: 0, driftTime: 0 };
   private replay: ReplayBuffer | null = null;
   private tv: TVDirector | null = null;
   private replayAt = -1;
@@ -333,7 +330,7 @@ export class RaceView {
         <button class="btn" data-act="camera">Cámara: <b>${{ trasera: 'Trasera', cercana: 'Cercana', capo: 'Capó' }[this.rig.mode]}</b></button>
         <button class="btn danger" data-act="exit" >Salir al menú</button>
         <button class="hidden" data-back data-act="resume"></button>
-        <div class="pause-help">Controles: ←→ girar · ↑ acelerar · ↓ frenar · Espacio derrapar · R reaparecer · C cámara</div>
+        <div class="pause-help">Controles: ←→ girar · ↑ acelerar · ↓ frenar · Espacio saltito · R reaparecer · C cámara</div>
       </div>`;
     this.pauseEl.classList.remove('hidden');
     this.ctx.touch?.show(false);
@@ -439,7 +436,7 @@ export class RaceView {
     // Con aceleración automática no se acelera en parrilla (evita la salida anticipada)
     pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
     pi.brake = ctrl.brake;
-    pi.drift = ctrl.drift;
+    pi.hop = ctrl.hop;
     if (this.player && !this.player.ai && this.sim.phase !== 'countdown') this.applyAssists(pi, Math.min(dt, 0.1));
 
     this.acc += Math.min(dt, 0.1) * DEBUG.timeScale;
@@ -457,7 +454,7 @@ export class RaceView {
       if (player && !player.finished) {
         const k = player.kart;
         if (k.wallImpact > 3) this.stats.wallHits++;
-        if (k.events.includes('boost1') || k.events.includes('boost2')) this.stats.boosts++;
+        if (k.events.includes('hop')) this.stats.hops++;
         if (k.drifting) this.stats.driftTime += STEP;
         this.stats.topSpeed = Math.max(this.stats.topSpeed, k.vF * 3.6);
       }
@@ -480,7 +477,7 @@ export class RaceView {
     this.visualTime += dt;
     if (this.tutorial) {
       const pv = this.views.find((v) => v.comp === player);
-      if (pv?.events.some((e) => e === 'boost1' || e === 'boost2')) this.tutorial.boost();
+      if (pv?.events.includes('hop')) this.tutorial.hop();
       this.tutorial.update(dt, pi.steer);
       if (this.tutorial.finished) {
         this.tutorialEnd += dt;
@@ -527,7 +524,7 @@ export class RaceView {
     const i0 = k.proj.idx;
     const slope = (this.track.py[(i0 + 3) % this.track.n] - this.track.py[i0]) / (3 * this.track.ds);
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;
-    this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y + k.driftVisual * 0.5, velYaw, sp / KART.vmax, k.boostTime > 0, slope * along);
+    this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along);
     if (v.wallImpact > 2) {
       this.rig.addShake(Math.min(1, v.wallImpact / 10));
       this.ctx.input.rumble(Math.min(1, v.wallImpact / 12), 180);
@@ -565,13 +562,14 @@ export class RaceView {
       const pos = v.mesh.root.position;
       const d2 = (pos.x - cam.x) ** 2 + (pos.z - cam.z) ** 2;
       if (d2 > 70 * 70) continue;
-      const yaw = v.mesh.root.rotation.y + k.driftVisual;
-      if (k.drifting && k.speed > 6) {
-        this.effects.driftSparks(pos.x, pos.y, pos.z, yaw, k.driftLevel, k.driftDir);
-        if (Math.random() < 0.35) this.effects.puff(pos.x - Math.sin(yaw) * 0.8, pos.y, pos.z - Math.cos(yaw) * 0.8, [0.85, 0.85, 0.85], 0.5, 0.7, 0.6);
+      const yaw = v.mesh.root.rotation.y;
+      // Humo de goma cuando la zaga desliza (más cuanto mayor es el ángulo)
+      const slideK = clamp((Math.abs(k.slipRear) - 0.1) / 0.25, 0, 1);
+      if (k.drifting && k.speed > 6 && Math.random() < 0.2 + slideK * 0.5) {
+        this.effects.puff(pos.x - Math.sin(yaw) * 0.8, pos.y, pos.z - Math.cos(yaw) * 0.8, [0.85, 0.85, 0.85], 0.4 + slideK * 0.4, 0.7, 0.6);
       }
       // Marcas de neumático al derrapar, deslizar o frenar a fondo
-      const sliding = (k.drifting || Math.abs(k.vL) > 2.6 || (v.comp.input.brake > 0.8 && k.vF > 12)) && k.speed > 5;
+      const sliding = (k.drifting || Math.abs(k.slipFront) > 0.16 || (v.comp.input.brake > 0.8 && k.vF > 12)) && k.speed > 5;
       const onAsphalt = k.surface === 'track' || k.surface === 'asphalt';
       for (const side of [-1, 1]) {
         const key = `${v.comp.id}${side}`;
@@ -599,14 +597,11 @@ export class RaceView {
       }
       if (v.kartImpact > 3 && d2 < 25 * 25) this.ctx.audio.hit(v.kartImpact * 0.6);
       for (const e of v.events) {
-        if (e === 'boost1' || e === 'boost2') {
-          this.effects.boostBurst(pos.x, pos.y, pos.z, yaw, e === 'boost2' ? 2 : 1);
-          if (v.comp === this.player) {
-            this.ctx.audio.boost(e === 'boost2' ? 2 : 1);
-            this.rig.addShake(0.15);
-          }
+        if (e === 'hop' && v.comp === this.player) {
+          this.ctx.audio.hop();
+          this.rig.addShake(0.06);
+          this.ctx.input.rumble(0.25, 60);
         }
-        if ((e === 'driftLevel1' || e === 'driftLevel2') && v.comp === this.player) this.ctx.audio.driftLevel(e === 'driftLevel2' ? 2 : 1);
       }
     }
     this.effects.update(dt);
@@ -619,14 +614,15 @@ export class RaceView {
     const ratio = Math.abs(k.vF) / KART.vmax;
     const thr = this.playerInput.throttle;
     const moving = k.speed > 1;
-    const rpm = moving ? clamp(0.14 + ratio * 0.82 + thr * 0.08 + (k.boostTime > 0 ? 0.08 : 0), 0, 1.1) : 0.12 + thr * 0.55;
+    const rpm = moving ? clamp(0.14 + ratio * 0.82 + thr * 0.08, 0, 1.1) : 0.12 + thr * 0.55;
     const rivals = this.sim.comps
       .filter((c) => c !== p)
       .map((c) => ({ rpm: clamp(0.14 + (Math.abs(c.kart.vF) / KART.vmax) * 0.85, 0, 1), dist: Math.hypot(c.kart.x - k.x, c.kart.z - k.z) }))
       .sort((a, b) => a.dist - b.dist)
       .slice(0, 2);
     this.ctx.audio.updateEngines({ rpm, load: thr }, rivals);
-    const skid = k.drifting ? 0.85 : clamp((Math.abs(k.vL) - 1.5) / 5, 0, 1);
+    // Chirrido proporcional al ángulo de deriva de los neumáticos
+    const skid = clamp((Math.max(Math.abs(k.slipRear), Math.abs(k.slipFront) * 0.8) - 0.09) / 0.2, 0, 1);
     const off = k.surface === 'grass' || k.surface === 'gravel' || k.surface === 'sand' ? 1 : k.surface === 'kerb' ? 0.55 : 0;
     this.ctx.audio.updateLoops(k.speed > 3 ? skid : 0, off * clamp(k.speed / 12, 0, 1), ratio * ratio);
   }
@@ -882,13 +878,13 @@ export class RaceView {
     if (!p) return;
     const k = p.kart;
     const ratio = Math.abs(k.vF) / KART.vmax;
-    hud.setSpeed(Math.abs(k.vF) * 3.6, ratio, k.boostTime > 0);
-    hud.setDrift(k.driftLevel, k.driftCharge, k.drifting);
+    hud.setSpeed(Math.abs(k.vF) * 3.6, ratio, false);
+    hud.setGrip(k.drifting ? Math.abs(Math.atan2(k.vL, Math.max(2, k.vF))) : 0, k.bog > 0.18 && this.playerInput.throttle > 0.5 && k.hopCool <= 0);
     // En móvil (pantalla pequeña) los efectos de velocidad se suavizan a la mitad
     const fxK = this.ctx.touchEnabled() ? 0.5 : 1;
-    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? (clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 + (k.boostTime > 0 ? 0.55 : 0)) * fxK : 0);
-    const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) + (k.boostTime > 0 ? 0.5 : 0) : 0);
-    hud.drawSpeedLines(Math.min(1, sl), k.boostTime > 0);
+    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 * fxK : 0);
+    const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) : 0);
+    hud.drawSpeedLines(Math.min(1, sl), false);
 
     // Dirección contraria
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;

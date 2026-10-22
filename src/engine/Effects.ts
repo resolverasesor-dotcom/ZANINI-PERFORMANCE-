@@ -139,44 +139,6 @@ export class Effects {
     return Math.random() < p * this.rate;
   }
 
-  /** Chispas de derrape en las ruedas traseras (nivel 0 blanco, 1 azul, 2 naranja). */
-  driftSparks(x: number, y: number, z: number, yaw: number, level: number, dir: number): void {
-    const fx = Math.sin(yaw);
-    const fz = Math.cos(yaw);
-    const rx = -fz;
-    const rz = fx;
-    const colors: [number, number, number][] = [
-      [1, 1, 0.8],
-      [0.3, 0.6, 1],
-      [1, 0.55, 0.1],
-    ];
-    const [r, g, b] = colors[level];
-    const n = level === 0 ? 1 : 3;
-    for (const side of [-1, 1]) {
-      if (side === dir && level === 0) continue;
-      for (let k = 0; k < n; k++) {
-        if (!this.chance(0.9)) continue;
-        const px = x - fx * 0.7 + rx * side * 0.62;
-        const pz = z - fz * 0.7 + rz * side * 0.62;
-        this.sparks.emit(
-          px,
-          y + 0.1,
-          pz,
-          -fx * (2 + Math.random() * 3) + (Math.random() - 0.5) * 3,
-          1.5 + Math.random() * 2.5,
-          -fz * (2 + Math.random() * 3) + (Math.random() - 0.5) * 3,
-          r,
-          g,
-          b,
-          level === 0 ? 0.12 : 0.22,
-          0.25 + Math.random() * 0.2,
-          0,
-          9,
-        );
-      }
-    }
-  }
-
   /** Humo de neumáticos (derrape) o polvo (fuera de pista). */
   puff(x: number, y: number, z: number, color: [number, number, number], size = 0.6, life = 0.8, vy = 0.8): void {
     if (!this.chance(1)) return;
@@ -188,16 +150,6 @@ export class Effects {
     const n = Math.min(24, 4 + strength * 2);
     for (let i = 0; i < n; i++) {
       this.sparks.emit(x, y + 0.4, z, (Math.random() - 0.5) * 9, 2 + Math.random() * 4, (Math.random() - 0.5) * 9, 1, 0.8, 0.3, 0.18, 0.3 + Math.random() * 0.3, 0, 12);
-    }
-  }
-
-  /** Destello del turbo. */
-  boostBurst(x: number, y: number, z: number, yaw: number, level: number): void {
-    const fx = Math.sin(yaw);
-    const fz = Math.cos(yaw);
-    for (let i = 0; i < 18; i++) {
-      const c: [number, number, number] = level === 2 ? [1, 0.6, 0.15] : [0.35, 0.65, 1];
-      this.sparks.emit(x - fx, y + 0.4, z - fz, -fx * 6 + (Math.random() - 0.5) * 4, Math.random() * 2, -fz * 6 + (Math.random() - 0.5) * 4, c[0], c[1], c[2], 0.3, 0.35, 0.5, 0);
     }
   }
 

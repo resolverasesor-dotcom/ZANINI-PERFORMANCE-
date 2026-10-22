@@ -1,5 +1,5 @@
 import { clamp, damp, rng, sign } from '../core/math';
-import { emptyInput, Kart, KART, maxYawRate, type KartInput } from '../physics/Kart';
+import { emptyInput, Kart, KART, steadySteer, type KartInput } from '../physics/Kart';
 import type { Track } from '../track/Track';
 import { DIFF_MISTAKES, DIFF_SPEED, paceFactor, type Difficulty, type DriverDef } from './Drivers';
 
@@ -17,7 +17,8 @@ type Mistake = { kind: 'late' | 'wide' | 'lift'; t: number; dir: number };
 /**
  * Piloto IA: sigue la línea de carrera con persecución pura, regula la velocidad
  * según el perfil precalculado, adelanta, defiende, comete errores según su
- * consistencia, derrapa en curvas largas y nunca se queda atascado.
+ * consistencia, da saltitos para sacar el kart de las curvas lentas y nunca se
+ * queda atascado. No "derrapa a voluntad": si desliza es porque la física lo pide.
  */
 export class AIDriver {
   readonly input: KartInput = emptyInput();
@@ -41,7 +42,8 @@ export class AIDriver {
   private offTime = 0;
   wantsRespawn = false;
   private rand: () => number;
-  private canDrift: boolean;
+  private canHop: boolean;
+  private hopPrev = false;
   /** Sin errores ni ruido (cálculo de tiempos de referencia, piloto automático). */
   perfect = false;
 
@@ -53,7 +55,7 @@ export class AIDriver {
     this.noisePhase = this.rand() * 100;
     this.noiseFreq = 0.15 + this.rand() * 0.2;
     this.speedFactor = DIFF_SPEED[difficulty] * (driver ? paceFactor(driver) : 1);
-    this.canDrift = difficulty !== 'facil' && (driver ? driver.pace > 0.55 : true);
+    this.canHop = difficulty !== 'facil' && (driver ? driver.pace > 0.5 : true);
   }
 
   private get consistency(): number {
@@ -118,39 +120,12 @@ export class AIDriver {
     const lr = dx * -fz + dz * fx;
     const alpha = Math.atan2(lr, lf);
     const dist = Math.hypot(dx, dz) || 1;
-    const wantYaw = (2 * Math.sin(alpha) * Math.max(v, 3)) / dist; // >0 = derecha
-    const wMax = Math.max(0.05, maxYawRate(Math.max(v, 3)));
-
-    // --- Derrape (curvas largas de radio medio) ---
-    let driftWanted = false;
-    if (this.canDrift && w.racing && !this.mistake) {
-      let kSum = 0;
-      let kMin = Infinity;
-      for (let d = 4; d <= 26; d += 2) {
-        const c = t.sample(t.lineCurv, s + d);
-        kSum += c;
-        kMin = Math.min(kMin, Math.abs(c));
-      }
-      const kMean = kSum / 12;
-      const ak = Math.abs(kMean);
-      if (k.drifting) {
-        const near = t.sample(t.lineCurv, s + 6);
-        driftWanted = sign(near) === k.driftDir && Math.abs(near) > 1 / 75 && v > 9;
-      } else {
-        driftWanted = v > 15 && ak > 1 / 80 && ak < 1 / 14 && kMin > 1 / 120 && sign(wantYaw) === sign(kMean) && Math.abs(lat - t.sample(t.lineOffset, ts)) < 1.5;
-      }
-    }
-
-    let steer: number;
-    if (k.drifting) {
-      const base = k.driftDir * wMax * KART.driftTurn;
-      steer = ((wantYaw / base - 1) / 0.5) * k.driftDir;
-    } else {
-      steer = wantYaw / wMax;
-    }
+    // Curvatura de persecución pura (>0 = derecha), dirección de régimen estacionario
+    // más una corrección sobre la guiñada real (así también recoge los derrapes)
+    const kDes = (2 * Math.sin(alpha)) / dist;
+    const wantYaw = kDes * Math.max(v, 3);
+    const steer = steadySteer(kDes, Math.max(v, 3)) + (wantYaw - k.yawRate) * 0.35;
     inp.steer = clamp(steer, -1, 1);
-    // Solo pulsar derrape si la física puede entrar en él (si no, actuaría el freno de mano)
-    inp.drift = driftWanted && (k.drifting || Math.abs(inp.steer) > 0.4);
 
     // --- Velocidad ---
     let target = t.sample(t.lineSpeed, s + v * 0.3 + 2) * this.speedFactor * w.rubber;
@@ -176,10 +151,15 @@ export class AIDriver {
     }
     if (this.mistake?.kind === 'lift') inp.throttle = Math.min(inp.throttle, 0.35);
 
+    // Saltito: a la salida de las curvas lentas, con el eje trasero clavado
+    const wantHop = this.canHop && w.racing && inp.throttle > 0.9 && k.bog > 0.12 && v < KART.vmax * 0.8 && !k.drifting;
+    inp.hop = wantHop && !this.hopPrev;
+    this.hopPrev = inp.hop;
+
     if (!w.racing) {
       inp.throttle = 0;
       inp.brake = 0;
-      inp.drift = false;
+      inp.hop = false;
       this.stuckTime = 0;
       return inp;
     }
@@ -199,7 +179,7 @@ export class AIDriver {
       if (Math.abs(alpha) < 0.5) this.reverseTime = 0;
       inp.throttle = 0;
       inp.brake = 1;
-      inp.drift = false;
+      inp.hop = false;
       inp.steer = -Math.sign(alpha);
     } else if (v < 1.5 && inp.throttle > 0.5) {
       this.stuckTime += dt;

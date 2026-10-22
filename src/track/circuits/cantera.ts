@@ -17,7 +17,7 @@ export const cantera: TrackDef = {
   id: 'cantera',
   name: 'Cantera',
   subtitle: 'Alta velocidad',
-  description: 'Una antigua cantera convertida en pista: rapidísima y con curvas para derrapar.',
+  description: 'Una antigua cantera convertida en pista: rapidísima y con curvas largas para dejar deslizar el kart.',
   theme: 'quarry',
   points: rounded(poly),
   width: 14,
@@ -25,7 +25,7 @@ export const cantera: TrackDef = {
   surface: 'gravel',
   startAt: 0.1478,
   laps: 4,
-  record: { time: 44.2, holder: 'S. Lindqvist' },
+  record: { time: 46.5, holder: 'S. Lindqvist' },
   length: 1373,
   difficulty: 3,
   decor: [

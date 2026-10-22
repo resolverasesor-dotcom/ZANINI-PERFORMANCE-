@@ -280,7 +280,7 @@ export class Game {
         <div class="menu-col">
           ${
             !tro.tutorial && !tro.tutorialDismissed
-              ? `<div class="first-run"><b>¿Primera vez?</b> Aprende a derrapar en 20 segundos.
+              ? `<div class="first-run"><b>¿Primera vez?</b> Aprende a conducir un kart en 20 segundos.
                   <div><button class="btn primary sm" data-act="tutorial">🎓 Tutorial</button> <button class="btn sm" data-act="notut">Ahora no</button></div></div>`
               : ''
           }
@@ -1080,7 +1080,7 @@ export class Game {
         .join('');
       body = `<div class="keys-list">${rows}</div>
         <button class="btn sm" data-act="resetkeys">Restablecer teclas</button>
-        <div class="hint"><b>Mando:</b> stick/cruceta girar · RT/A acelerar · LT/X frenar · RB/LB/B derrapar · Y reaparecer · Select cámara · Start pausa.</div>
+        <div class="hint"><b>Mando:</b> stick/cruceta girar · RT/A acelerar · LT/X frenar · RB/LB/B saltito · Y reaparecer · Select cámara · Start pausa.</div>
         ${this.choice('Controles táctiles', 'touch', [['auto', 'Auto'], ['on', 'Siempre'], ['off', 'Nunca']], s.touch)}
         ${this.choice('Dirección táctil', 'touchsteer', [['pad', 'Barra deslizante'], ['botones', 'Flechas'], ['inclinar', 'Inclinar el móvil']], s.touchSteer)}
         ${this.choice('Aceleración automática (táctil)', 'autoaccel', [['on', 'Sí'], ['off', 'No']], s.autoAccel ? 'on' : 'off')}

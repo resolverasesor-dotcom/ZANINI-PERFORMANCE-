@@ -2,7 +2,7 @@ import { load, save } from '../core/Storage';
 import type { HelmetStyle, LiveryStyle } from '../engine/livery';
 import { CIRCUITS } from '../track/circuits/index';
 import { loadTrophies } from './Championship';
-import { loadRecord } from './Ghost';
+import { loadLegacyBest, loadRecord } from './Ghost';
 import { medalFor } from './medals';
 
 // Desbloqueables: colores, cascos y decoraciones del kart que se ganan jugando.
@@ -26,7 +26,7 @@ export function getProgress(): Progress {
   let golds = 0;
   let silvers = 0;
   for (const c of CIRCUITS) {
-    const best = loadRecord(c.id).best;
+    const best = loadRecord(c.id).best ?? loadLegacyBest(c.id);
     if (best == null) continue;
     records++;
     const m = medalFor(c, best);

@@ -247,7 +247,7 @@ export class RaceSim {
           this.gridInput.throttle = inp.throttle;
           this.gridInput.steer = inp.steer;
           this.gridInput.brake = 0;
-          this.gridInput.drift = false;
+          this.gridInput.hop = false;
           inp = this.gridInput;
         }
         if (playerRespawn && racing) c.kart.respawn(track);

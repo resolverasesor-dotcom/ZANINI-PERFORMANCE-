@@ -27,7 +27,7 @@ export const urbano: TrackDef = {
   surface: 'asphalt',
   startAt: 0.1781,
   laps: 4,
-  record: { time: 39.6, holder: 'D. Okafor' },
+  record: { time: 45.1, holder: 'D. Okafor' },
   length: 897,
   difficulty: 4,
   decor: [
