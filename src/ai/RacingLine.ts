@@ -21,7 +21,8 @@ export function computeRacingLine(track: Track): void {
     cz[k] = track.pz[i];
     rx[k] = -track.tz[i];
     rz[k] = track.tx[i];
-    lim[k] = Math.max(0, track.hw[i] - 1.5);
+    // Como un piloto real: las ruedas interiores muerden el piano en el vértice
+    lim[k] = Math.max(0, track.hw[i] - 0.75);
   }
   const iters = 400;
   for (let it = 0; it < iters; it++) {

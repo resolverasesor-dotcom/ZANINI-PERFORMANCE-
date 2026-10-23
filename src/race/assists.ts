@@ -72,7 +72,8 @@ export class DriverAssist {
     const rz = p.tx;
     const vLat = k.vx * rx + k.vz * rz;
     const latPred = p.lat + vLat * 0.75;
-    const limit = p.hw - (strong ? 1.1 : 0.9);
+    // Deja usar el piano (como la trazada de la IA), corrige más allá
+    const limit = p.hw - (strong ? 0.6 : 0.45);
     if (Math.abs(latPred) <= limit) return;
     const over = clamp((Math.abs(latPred) - limit) / 1.4, 0, 1);
     // Si el morro apunta hacia fuera, corregir con más fuerza

@@ -133,7 +133,10 @@ class KartView {
     b.rotation.z = damp(b.rotation.z, roll, 10, dt);
     // Cabeceo leve: morro abajo al frenar, arriba al acelerar
     b.rotation.x = damp(b.rotation.x, clamp(-k.ax * 0.0025, -0.03, 0.02), 10, dt);
-    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
+    // Piano: el kart traquetea al ritmo de los resaltes (y se inclina hacia el lado que pisa)
+    const kerbBump = k.kerb > 0 && k.speed > 3 ? Math.abs(Math.sin((k.odometer / 0.42) * Math.PI)) * 0.022 * k.kerb : 0;
+    if (kerbBump) b.rotation.z += -k.kerbSide * kerbBump * 1.5;
+    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + kerbBump + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
     // Ruedas delanteras con su ángulo real (a alta velocidad apenas giran)
     for (const p of this.mesh.frontPivots) p.rotation.y = -k.wheelAngle;
     // Piloto: volante, cabeza que mira e inclina hacia la curva
@@ -542,8 +545,20 @@ export class RaceView {
       this.ctx.input.rumble(0.4, 100);
     }
     if (k.rumble > 0 && sp > 8) this.rig.addShake(0.015 * k.rumble);
+    // Piano: temblor de cámara y vibración rítmica del mando / móvil
+    if (k.kerb > 0 && sp > 5) {
+      this.rig.addShake(0.03 * k.kerb * Math.min(1, sp / 20));
+      this.kerbBuzz -= dt;
+      if (this.kerbBuzz <= 0) {
+        this.kerbBuzz = 0.12;
+        this.ctx.input.rumble(0.2 + 0.35 * k.kerb, 100);
+        if (this.ctx.touchEnabled() && this.ctx.settings.vibration && navigator.vibrate) navigator.vibrate(18);
+      }
+    } else this.kerbBuzz = 0;
     this.trackScene.update(dt, pos);
   }
+
+  private kerbBuzz = 0;
 
   private updateGhost(): void {
     const g = this.ghostMesh;
@@ -601,10 +616,15 @@ export class RaceView {
       v.prevThrottle = thr;
       if (v.wallImpact > 3) {
         this.effects.impact(pos.x, pos.y, pos.z, v.wallImpact);
-        if (d2 < 30 * 30) this.ctx.audio.hit(v.wallImpact * (v.comp === this.player ? 1 : 0.5));
+        if (d2 < 30 * 30) this.ctx.audio.hitBarrier(v.wallImpact * (v.comp === this.player ? 1 : 0.5));
       }
-      if (v.kartImpact > 3 && d2 < 25 * 25) this.ctx.audio.hit(v.kartImpact * 0.6);
+      if (v.kartImpact > 1.5 && d2 < 25 * 25) this.ctx.audio.hitKart(v.kartImpact * (v.comp === this.player ? 1 : 0.6));
       for (const e of v.events) {
+        if (e === 'kerb' && v.comp !== this.player && d2 < 15 * 15) this.ctx.audio.kerbHit(k.speed * 0.5);
+        if (e === 'kerb' && v.comp === this.player) {
+          this.ctx.audio.kerbHit(k.speed);
+          this.ctx.input.rumble(0.45, 90);
+        }
         if (e === 'hop' && v.comp === this.player) {
           this.ctx.audio.hop();
           this.rig.addShake(0.06);
@@ -623,16 +643,49 @@ export class RaceView {
     const thr = this.playerInput.throttle;
     const moving = k.speed > 1;
     const rpm = moving ? clamp(0.14 + ratio * 0.82 + thr * 0.08, 0, 1.1) : 0.12 + thr * 0.55;
+    // Rivales: los 3 más cercanos, con estéreo (respecto al morro del jugador) y Doppler
+    const rx = -Math.cos(k.yaw);
+    const rz = Math.sin(k.yaw);
     const rivals = this.sim.comps
       .filter((c) => c !== p)
-      .map((c) => ({ rpm: clamp(0.14 + (Math.abs(c.kart.vF) / KART.vmax) * 0.85, 0, 1), dist: Math.hypot(c.kart.x - k.x, c.kart.z - k.z) }))
+      .map((c) => {
+        const o = c.kart;
+        const dx = o.x - k.x;
+        const dz = o.z - k.z;
+        const dist = Math.hypot(dx, dz) || 1;
+        const ux = dx / dist;
+        const uz = dz / dist;
+        // f' = f·(c + v_oyente)/(c − v_fuente), velocidades hacia el otro
+        const vl = k.vx * ux + k.vz * uz;
+        const vs = -(o.vx * ux + o.vz * uz);
+        const doppler = clamp((343 + vl) / (343 - vs), 0.88, 1.12);
+        const oRpm = clamp(0.14 + (Math.abs(o.vF) / KART.vmax) * 0.85 + c.input.throttle * 0.06, 0, 1.1);
+        return { rpm: oRpm, dist, pan: clamp((ux * rx + uz * rz) * 0.85, -0.85, 0.85), doppler };
+      })
       .sort((a, b) => a.dist - b.dist)
-      .slice(0, 2);
+      .slice(0, 3);
     this.ctx.audio.updateEngines({ rpm, load: thr }, rivals);
-    // Chirrido proporcional al ángulo de deriva de los neumáticos
-    const skid = clamp((Math.max(Math.abs(k.slipRear), Math.abs(k.slipFront) * 0.8) - 0.09) / 0.2, 0, 1);
-    const off = k.surface === 'grass' || k.surface === 'gravel' || k.surface === 'sand' ? 1 : k.surface === 'kerb' ? 0.55 : 0;
-    this.ctx.audio.updateLoops(k.speed > 3 ? skid : 0, off * clamp(k.speed / 12, 0, 1), ratio * ratio);
+    // Neumáticos: rozamiento al acercarse al límite de agarre y chirrido al deslizar
+    const sF = Math.abs(k.slipFront);
+    const sR = Math.abs(k.slipRear);
+    const moving3 = k.speed > 3 ? 1 : 0;
+    const scrub = clamp((Math.max(sF, sR) - 0.035) / 0.07, 0, 1) * moving3;
+    const squeal = clamp((Math.max(sR, sF * 0.9) - 0.1) / 0.16, 0, 1) * moving3 + (this.playerInput.brake > 0.8 && k.vF > 12 ? 0.25 : 0);
+    const surf = k.surface;
+    this.ctx.audio.updateLoops(
+      {
+        speed: k.speed,
+        scrub,
+        squeal: Math.min(1, squeal),
+        kerb: k.kerb,
+        kerbSide: k.kerbSide,
+        grass: surf === 'grass' ? 1 : 0,
+        gravel: surf === 'gravel' || surf === 'sand' ? 1 : 0,
+        load: thr,
+        wind: ratio * ratio,
+      },
+      this.sim.phase === 'countdown' ? 1 : 0.6,
+    );
   }
 
   // ---------- ayudas a la conducción ----------
@@ -743,6 +796,7 @@ export class RaceView {
         this.trackScene.setStartLights(0);
         hud.message('¡YA!', 'go', 1.2);
         a.goBeep();
+        a.cheer(0.8);
         setTimeout(() => hud.setLights(0, false), 900);
         break;
       case 'jumpstart':
@@ -790,6 +844,7 @@ export class RaceView {
           const pos = this.sim.player!.position;
           hud.message(`<span class="flagtxt">🏁</span> ¡META! <b>P${pos}</b>`, 'finish', 5);
           a.fanfare();
+          a.cheer(1);
           this.finishedAt = this.visualTime;
           if (this.replay && this.replay.duration > 3) this.replayAt = this.visualTime + 1.8;
         }

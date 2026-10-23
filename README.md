@@ -88,6 +88,26 @@ con los valores de un kart de 125 cc con piloto (165 kg, batalla 1,04 m).
 `npm run test:physics` mide aceleración, inercia, frenada, agarre lateral, respuesta a un volantazo,
 frenar girando y el efecto del saltito.
 
+## Sonido
+
+Todo se sintetiza en el navegador con Web Audio (sin archivos de sonido):
+
+- **Motor de dos tiempos 125 cc**: una explosión por vuelta (de ~40 a ~280 Hz entre 2.500 y
+  17.000 rpm), onda de pulsos estrecha, ruido de escape que late con cada explosión, resonancias de la
+  cámara de expansión y tartamudeo/petardeo al cortar gas. Embrague centrífugo: en parrilla sube de
+  vueltas al acelerar.
+- **Pianos**: el "brrrrr" de los resaltes a *velocidad / 0,42 m* Hz (48 Hz a 72 km/h), traqueteo del
+  chasis, sonido del lado que pisas, golpe de entrada, temblor de cámara, el kart vibrando y
+  vibración rítmica del mando y del móvil. Se detectan rueda a rueda (antes solo con el centro del kart,
+  así que casi nunca sonaban). La IA también muerde los pianos en los vértices.
+- **Neumáticos**: roce de goma al acercarte al límite de agarre y chirrido al deslizar, según el ángulo
+  de deriva real.
+- **Transmisión y rodadura**: silbido de la cadena (sube con la velocidad), rodadura sobre asfalto,
+  hierba, crujido granular de la grava y viento.
+- **Rivales** con estéreo y efecto Doppler al pasar (los 3 más cercanos).
+- **Golpes**: sordo con rebote de goma contra la barrera de neumáticos; "clac" de plástico entre karts.
+- **Ambiente**: murmullo del público y ovación en la salida y en la bandera a cuadros.
+
 ## Circuitos
 
 Ninguna vuelta pasa de 1:20, como en karting real: casi todos se dan en 35–60 s

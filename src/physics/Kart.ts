@@ -144,7 +144,7 @@ export function cornerSpeed(k: number, margin = 0.92): number {
   return v2 <= 16 ? 4 : Math.min(KART.vmax, Math.sqrt(v2));
 }
 
-export type KartEvent = 'hop' | 'slideStart';
+export type KartEvent = 'hop' | 'slideStart' | 'kerb';
 
 const SUBSTEPS = 4;
 
@@ -201,6 +201,12 @@ export class Kart {
   hopActive = 0;
   hopCool = 0;
   rumble = 0;
+  /** Ruedas sobre el piano: 0 (ninguna), 0.5 (un lado), 1 (las cuatro). */
+  kerb = 0;
+  /** Lado del piano que se pisa (1 = derecha). */
+  kerbSide = 0;
+  /** Distancia recorrida (m), para el ritmo de los resaltes del piano. */
+  odometer = 0;
   throttleVisual = 0;
   /** Para sonido/partículas. */
   events: KartEvent[] = [];
@@ -473,6 +479,21 @@ export class Kart {
     this.y = p.y;
     const a = Math.abs(p.lat);
     const idx = p.idx;
+    // Pianos rueda a rueda: basta con que las ruedas de un lado pisen la franja
+    const prevKerb = this.kerb;
+    this.kerb = 0;
+    this.kerbSide = 0;
+    if (track.kerb[idx]) {
+      for (const sd of [-1, 1]) {
+        const wl = p.lat + sd * 0.6;
+        if (Math.abs(wl) > p.hw - 0.05 && Math.abs(wl) < p.hw + KERB_WIDTH + 0.1 && Math.sign(wl) === sd) {
+          this.kerb += 0.5;
+          this.kerbSide = sd;
+        }
+      }
+    }
+    if (this.kerb > 0 && prevKerb === 0 && this.speed > 4) this.events.push('kerb');
+    this.odometer += this.speed * _dt;
     if (a <= p.hw + 0.3) this.surface = 'track';
     else if (a <= p.hw + KERB_WIDTH && track.kerb[idx]) this.surface = 'kerb';
     else if (a <= p.hw + 0.6) this.surface = 'track';
