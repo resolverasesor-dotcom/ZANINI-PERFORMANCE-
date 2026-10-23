@@ -1,7 +1,7 @@
 // Ajustes de identidad del juego. Cambia aquí la dedicatoria.
 
 /** Texto de la pantalla de arranque. */
-export const DEDICATION = 'Para Ale, de ...';
+export const DEDICATION = 'Para Ale, de papá';
 export const DEDICATION_SUB = 'Que cada vuelta sea la más rápida.';
 
 export const COLORS = {

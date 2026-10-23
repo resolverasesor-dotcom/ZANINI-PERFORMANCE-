@@ -61,7 +61,9 @@ export const KART = {
   yawDamp: 60,
   reverseMax: 7,
   radius: 0.95,
-  wallRadius: 0.8,
+  /** Barrera de neumáticos: rebote y fricción en el contacto. */
+  wallRestitution: 0.3,
+  wallFriction: 0.45,
   /** Saltito: duración, recarga y ganancia de tracción. */
   hopTime: 0.3,
   hopCool: 0.7,
@@ -83,14 +85,18 @@ export function setKartClass(vmaxFactor: number, accelFactor: number): void {
 
 export type SurfaceKind = 'track' | 'kerb' | 'grass' | 'gravel' | 'sand' | 'asphalt';
 
-/** Agarre relativo y resistencia a la rodadura extra (N por kg y por m/s) de cada superficie. */
-const SURF: Record<SurfaceKind, { grip: number; drag: number }> = {
-  track: { grip: 1, drag: 0 },
-  kerb: { grip: 0.93, drag: 0.04 },
-  asphalt: { grip: 0.9, drag: 0.05 },
-  grass: { grip: 0.55, drag: 0.32 },
-  sand: { grip: 0.48, drag: 0.5 },
-  gravel: { grip: 0.45, drag: 0.6 },
+/**
+ * Por superficie: agarre relativo, rodadura extra (fracción del peso) y frenado
+ * proporcional a la velocidad (hierba que se hunde, grava que "traga" el kart).
+ * La hierba apenas frena, lo que castiga es que no agarra; la grava sí para el kart.
+ */
+const SURF: Record<SurfaceKind, { grip: number; crr: number; vK: number }> = {
+  track: { grip: 1, crr: 0, vK: 0 },
+  kerb: { grip: 0.93, crr: 0.01, vK: 0.005 },
+  asphalt: { grip: 0.9, crr: 0.005, vK: 0.005 },
+  grass: { grip: 0.55, crr: 0.08, vK: 0.04 },
+  sand: { grip: 0.48, crr: 0.3, vK: 0.12 },
+  gravel: { grip: 0.45, crr: 0.35, vK: 0.15 },
 };
 
 /** Fuerza lateral normalizada del neumático para un ángulo de deriva (−1…1, pico ≈ 1). */
@@ -199,8 +205,10 @@ export class Kart {
   /** Para sonido/partículas. */
   events: KartEvent[] = [];
   private hopHeld = false;
-  /** Aceleración longitudinal filtrada (para la transferencia de carga). */
-  private ax = 0;
+  /** Aceleración longitudinal filtrada (transferencia de carga y cabeceo visual). */
+  ax = 0;
+  /** Ángulo real de las ruedas delanteras (rad, positivo = derecha). */
+  wheelAngle = 0;
 
   setPose(track: Track, s: number, lat: number): void {
     const p = { x: 0, y: 0, z: 0 };
@@ -333,8 +341,12 @@ export class Kart {
       const uu = Math.max(au, 0.5);
       const alphaF = delta - Math.atan2(vy + KART.a * w, uu);
       const alphaR = -Math.atan2(vy - KART.b * w, uu);
-      const FyF = FyFcap * tyreCurve(alphaF);
-      const FyR = FyRcap * tyreCurve(alphaR, KART.tyreCRear);
+      // Por debajo de ~1 m/s el neumático no puede generar fuerza lateral apreciable
+      // (sin esto, un kart parado con las ruedas giradas "se empujaría" solo)
+      const fade = clamp(Math.hypot(u, vy) / 1.2, 0, 1);
+      const FyF = FyFcap * tyreCurve(alphaF) * fade;
+      const FyR = FyRcap * tyreCurve(alphaR, KART.tyreCRear) * fade;
+      this.wheelAngle = -delta;
       this.slipFront = alphaF;
       this.slipRear = alphaR;
 
@@ -346,7 +358,7 @@ export class Kart {
       bogAcc += bog;
 
       // Resistencias (siempre contra el avance)
-      const rollF = KART.crr * m * g + surf.drag * m * au;
+      const rollF = (KART.crr + surf.crr) * m * g + surf.vK * m * au;
       const aeroF = KART.dragK * (1 - 0.4 * this.slip) * u * u;
       const engF = thr < 0.05 && u > 0 ? KART.engineBrake + KART.engineBrakeV * u : 0;
       const resist = (rollF + aeroF + engF + scrubF) * sign(u);
@@ -378,6 +390,12 @@ export class Kart {
         vy = vyk + (vy - vyk) * kb;
       }
 
+      // Rozamiento estático: parado y sin gas, el kart no se mueve (ni gira sobre sí mismo)
+      if (thr <= 0.02 && reverse === 0 && Math.hypot(u, vy) < 0.25 && Math.abs(gravity) < KART.crr * m * g * 3) {
+        u = 0;
+        vy = 0;
+        w = 0;
+      }
       this.ax = this.ax + (axForce - this.ax) * Math.min(1, h * 25);
       this.yaw = wrapAngle(this.yaw + w * h);
       const nfx = Math.sin(this.yaw);
@@ -409,49 +427,47 @@ export class Kart {
     this.throttleVisual = damp(this.throttleVisual, thr, 10, dt);
   }
 
-  /** Superficie, altura y rebote contra muros. */
-  collideTrack(track: Track, dt: number): void {
+  /**
+   * Superficie, altura y choque contra la barrera. El contacto se resuelve en la
+   * esquina del kart que toca (paragolpes o rueda), con impulso, restitución de
+   * neumático y fricción: un golpe de refilón hace girar el kart como en la realidad.
+   */
+  collideTrack(track: Track, _dt: number): void {
     const p = track.project(this.x, this.z, this.proj.idx, this.proj);
-    const rx = -p.tz;
-    const rz = p.tx;
-    const R = KART.wallRadius;
+    const trx = -p.tz;
+    const trz = p.tx;
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
     let pen = 0;
-    let nx = 0;
-    let nz = 0;
-    if (p.lat > p.limR - R) {
-      pen = p.lat - (p.limR - R);
-      nx = rx;
-      nz = rz;
-    } else if (p.lat < -(p.limL - R)) {
-      pen = -(p.limL - R) - p.lat;
-      nx = -rx;
-      nz = -rz;
+    let side = 0;
+    let ox = 0;
+    let oz = 0;
+    for (const [lf, lr] of CORNERS) {
+      const cx = fx * lf - fz * lr;
+      const cz = fz * lf + fx * lr;
+      const clat = p.lat + cx * trx + cz * trz;
+      const pr = clat - p.limR;
+      const pl = -p.limL - clat;
+      if (pr > pen) {
+        pen = pr;
+        side = 1;
+        ox = cx;
+        oz = cz;
+      }
+      if (pl > pen) {
+        pen = pl;
+        side = -1;
+        ox = cx;
+        oz = cz;
+      }
     }
     if (pen > 0) {
+      const nx = side * trx;
+      const nz = side * trz;
       this.x -= nx * pen;
       this.z -= nz * pen;
-      const vn = this.vx * nx + this.vz * nz;
-      if (vn > 0) {
-        this.wallImpact = vn;
-        const e = 0.35;
-        this.vx -= nx * vn * (1 + e);
-        this.vz -= nz * vn * (1 + e);
-        const scrub = 1 - Math.min(0.45, vn * 0.035);
-        this.vx *= scrub;
-        this.vz *= scrub;
-        // El golpe frena el giro
-        this.yawRate *= 1 - Math.min(0.6, vn * 0.08);
-      }
-      // Girar el morro para alinearlo con el muro y evitar quedarse clavado.
-      const fx = Math.sin(this.yaw);
-      const fz = Math.cos(this.yaw);
-      const into = fx * nx + fz * nz;
-      if (into > 0.05) {
-        const dir = fx * p.tx + fz * p.tz >= 0 ? 1 : -1;
-        const target = Math.atan2(p.tx * dir, p.tz * dir);
-        const d = wrapAngle(target - this.yaw);
-        this.yaw = wrapAngle(this.yaw + d * Math.min(1, 6 * dt));
-      }
+      const res = applyImpulse(this, null, ox, oz, 0, 0, nx, nz, KART.wallRestitution, KART.wallFriction);
+      if (res > 0) this.wallImpact = res;
       track.project(this.x, this.z, p.idx, p);
     }
     this.y = p.y;
@@ -465,43 +481,121 @@ export class Kart {
   }
 }
 
-/** Colisiones kart-kart: círculos con empuje y restitución. */
-export function collideKarts(karts: Kart[]): void {
-  const R2 = KART.radius * 2;
-  for (let i = 0; i < karts.length; i++) {
-    const a = karts[i];
-    a.kartImpact = 0;
+/** Huella del kart para los choques: (adelante, derecha) en metros. */
+const CORNERS: [number, number][] = [
+  [0.95, 0.6],
+  [0.95, -0.6],
+  [-0.9, 0.68],
+  [-0.9, -0.68],
+];
+/** Contorno para choques entre karts: dos círculos (morro y zaga). */
+const BODY_R = 0.66;
+const BODY_C = [0.3, -0.3];
+
+/**
+ * Impulso en un punto de contacto entre el kart a y (opcionalmente) el kart b.
+ * (rax, raz) y (rbx, rbz) son los brazos desde cada centro de gravedad; n apunta de
+ * a hacia el obstáculo. Devuelve la velocidad de impacto (m/s) o 0 si se separaban.
+ */
+function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: number, rbz: number, nx: number, nz: number, e: number, mu: number): number {
+  const m = KART.mass;
+  const I = KART.Iz;
+  // velocidad angular antihoraria (la guiñada del kart es positiva a la derecha)
+  const wa = -a.yawRate;
+  const wb = b ? -b.yawRate : 0;
+  // velocidad de un punto: v + w·(rz, −rx)
+  let rvx = a.vx + wa * raz;
+  let rvz = a.vz - wa * rax;
+  if (b) {
+    rvx -= b.vx + wb * rbz;
+    rvz -= b.vz - wb * rbx;
   }
+  const vn = rvx * nx + rvz * nz;
+  if (vn <= 0) return 0;
+  const cross = (rx: number, rz: number, jx: number, jz: number) => jx * rz - jz * rx;
+  const ka = 1 / m + cross(rax, raz, nx, nz) ** 2 / I;
+  const kb = b ? 1 / m + cross(rbx, rbz, nx, nz) ** 2 / I : 0;
+  const j = ((1 + e) * vn) / (ka + kb);
+  let jx = -j * nx;
+  let jz = -j * nz;
+  // Fricción tangencial (limitada por Coulomb)
+  const tx = rvx - vn * nx;
+  const tz = rvz - vn * nz;
+  const vt = Math.hypot(tx, tz);
+  if (vt > 1e-4) {
+    const ux = tx / vt;
+    const uz = tz / vt;
+    const kta = 1 / m + cross(rax, raz, ux, uz) ** 2 / I;
+    const ktb = b ? 1 / m + cross(rbx, rbz, ux, uz) ** 2 / I : 0;
+    const jt = Math.min(mu * j, vt / (kta + ktb));
+    jx -= jt * ux;
+    jz -= jt * uz;
+  }
+  a.vx += jx / m;
+  a.vz += jz / m;
+  a.yawRate -= cross(rax, raz, jx, jz) / I;
+  if (b) {
+    b.vx -= jx / m;
+    b.vz -= jz / m;
+    b.yawRate += cross(rbx, rbz, jx, jz) / I;
+  }
+  return vn;
+}
+
+/**
+ * Colisiones kart-kart con dos círculos por kart: empuje para separarlos e impulso
+ * en el punto de contacto (un toque en la zaga hace girar al de delante).
+ */
+export function collideKarts(karts: Kart[]): void {
+  for (const k of karts) k.kartImpact = 0;
+  const R2 = BODY_R * 2;
   for (let i = 0; i < karts.length; i++) {
     const a = karts[i];
     if (a.ghost > 0) continue;
+    const afx = Math.sin(a.yaw);
+    const afz = Math.cos(a.yaw);
     for (let j = i + 1; j < karts.length; j++) {
       const b = karts[j];
       if (b.ghost > 0) continue;
       if (Math.abs(a.y - b.y) > 1.8) continue;
-      let dx = b.x - a.x;
-      let dz = b.z - a.z;
-      const d2 = dx * dx + dz * dz;
-      if (d2 >= R2 * R2 || d2 < 1e-6) continue;
-      const d = Math.sqrt(d2);
-      dx /= d;
-      dz /= d;
-      const pen = R2 - d;
-      a.x -= dx * pen * 0.5;
-      a.z -= dz * pen * 0.5;
-      b.x += dx * pen * 0.5;
-      b.z += dz * pen * 0.5;
-      const rv = (b.vx - a.vx) * dx + (b.vz - a.vz) * dz;
-      if (rv < 0) {
-        const e = 0.3;
-        const jimp = (-(1 + e) * rv) / 2;
-        a.vx -= dx * jimp;
-        a.vz -= dz * jimp;
-        b.vx += dx * jimp;
-        b.vz += dz * jimp;
-        a.kartImpact = Math.max(a.kartImpact, -rv);
-        b.kartImpact = Math.max(b.kartImpact, -rv);
+      const dcx = b.x - a.x;
+      const dcz = b.z - a.z;
+      if (dcx * dcx + dcz * dcz > 9) continue;
+      const bfx = Math.sin(b.yaw);
+      const bfz = Math.cos(b.yaw);
+      // par de círculos más metido
+      let best = 0;
+      let nx = 0;
+      let nz = 0;
+      let pax = 0;
+      let paz = 0;
+      for (const ca of BODY_C) {
+        const ax = a.x + afx * ca;
+        const az = a.z + afz * ca;
+        for (const cb of BODY_C) {
+          const bx = b.x + bfx * cb;
+          const bz = b.z + bfz * cb;
+          const dx = bx - ax;
+          const dz = bz - az;
+          const d = Math.hypot(dx, dz);
+          const pen = R2 - d;
+          if (pen > best && d > 1e-6) {
+            best = pen;
+            nx = dx / d;
+            nz = dz / d;
+            pax = ax + nx * BODY_R;
+            paz = az + nz * BODY_R;
+          }
+        }
       }
+      if (best <= 0) continue;
+      a.x -= nx * best * 0.5;
+      a.z -= nz * best * 0.5;
+      b.x += nx * best * 0.5;
+      b.z += nz * best * 0.5;
+      const v = applyImpulse(a, b, pax - a.x, paz - a.z, pax - b.x, paz - b.z, nx, nz, 0.25, 0.3);
+      a.kartImpact = Math.max(a.kartImpact, v);
+      b.kartImpact = Math.max(b.kartImpact, v);
     }
   }
 }

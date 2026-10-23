@@ -44,6 +44,10 @@ export class AIDriver {
   private rand: () => number;
   private canHop: boolean;
   private hopPrev = false;
+  /** Tras la salida, mantener el carril de la parrilla unos segundos. */
+  private laneHold = 0;
+  private laneLat = 0;
+  private wasRacing = false;
   /** Sin errores ni ruido (cálculo de tiempos de referencia, piloto automático). */
   perfect = false;
 
@@ -102,6 +106,17 @@ export class AIDriver {
     const ts = s + Ld;
     const curvAhead = t.sample(t.lineCurv, s + Ld * 1.5);
     let lat = t.sample(t.lineOffset, ts) + this.bias;
+    if (w.racing && !this.wasRacing) {
+      this.laneHold = 2.5;
+      this.laneLat = k.proj.lat;
+    }
+    this.wasRacing = w.racing;
+    if (this.laneHold > 0) {
+      // Salida recta por su carril y, poco a poco, hacia la trazada
+      this.laneHold -= dt;
+      const f = clamp(this.laneHold / 1.5, 0, 1);
+      lat = lat + (this.laneLat - lat) * f;
+    }
     const cons = this.consistency;
     lat += Math.sin(this.noisePhase * 6.28) * (1 - cons) * 1.4;
     if (this.mistake?.kind === 'wide') {
@@ -157,6 +172,8 @@ export class AIDriver {
     this.hopPrev = inp.hop;
 
     if (!w.racing) {
+      // En parrilla: quieto y con el volante recto
+      inp.steer = 0;
       inp.throttle = 0;
       inp.brake = 0;
       inp.hop = false;

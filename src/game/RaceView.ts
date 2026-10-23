@@ -126,18 +126,26 @@ class KartView {
     r.rotation.x = damp(r.rotation.x, -Math.atan(slope * along), 10, dt);
     const b = this.mesh.body;
     b.rotation.y = 0;
-    const roll = clamp(-k.yawRate * Math.max(0, k.vF) * 0.012, -0.12, 0.12);
-    b.rotation.z = damp(b.rotation.z, roll, 8, dt);
+    // Un kart no tiene suspensión: no balancea como un coche. Con mucho apoyo lateral
+    // (>0,9 g) el chasis se retuerce y levanta la rueda trasera interior.
+    const ay = k.yawRate * Math.max(0, k.vF);
+    const roll = -Math.sign(ay) * clamp((Math.abs(ay) - 9) / 7, 0, 1) * 0.07;
+    b.rotation.z = damp(b.rotation.z, roll, 10, dt);
+    // Cabeceo leve: morro abajo al frenar, arriba al acelerar
+    b.rotation.x = damp(b.rotation.x, clamp(-k.ax * 0.0025, -0.03, 0.02), 10, dt);
     b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
-    for (const p of this.mesh.frontPivots) p.rotation.y = -k.steer * 0.45;
+    // Ruedas delanteras con su ángulo real (a alta velocidad apenas giran)
+    for (const p of this.mesh.frontPivots) p.rotation.y = -k.wheelAngle;
     // Piloto: volante, cabeza que mira e inclina hacia la curva
-    this.mesh.steering.rotation.z = k.steer * 1.4;
+    // Volante con desmultiplicación ~1:3 respecto a las ruedas, más la intención del piloto
+    this.mesh.steering.rotation.z = clamp(k.wheelAngle * 3.2 + k.steer * 0.25, -1.6, 1.6);
     const m = this.mesh.helmet;
     // Al derrapar el piloto mira hacia donde va el kart (contra el ángulo de deriva)
     m.rotation.y = damp(m.rotation.y, -k.steer * 0.3 + clamp(Math.atan2(k.vL, Math.max(2, k.vF)), -0.6, 0.6) * 0.8, 8, dt);
     // En el saltito el piloto se levanta del asiento
     m.position.y = 1.0 + (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.12 : 0);
-    m.rotation.z = damp(m.rotation.z, roll * 2.6, 8, dt);
+    // El piloto inclina la cabeza hacia el interior de la curva (contra la fuerza G)
+    m.rotation.z = damp(m.rotation.z, clamp(-ay * 0.014, -0.28, 0.28), 8, dt);
     // Luz de freno
     if (this.mesh.brakeMat) {
       const braking = this.comp.input.brake > 0.1 && k.vF > 1;

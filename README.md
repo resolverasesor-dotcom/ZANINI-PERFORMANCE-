@@ -3,7 +3,7 @@
 Juego de karts 3D para navegador hecho con **Three.js + TypeScript + Vite**. Todo
 (geometría, texturas, sonido y música) se genera por código: no hay archivos externos.
 
-> Para Ale. 🏁
+> Para Ale, de papá. 🏁
 
 ## Arrancar
 
@@ -77,6 +77,13 @@ con los valores de un kart de 125 cc con piloto (165 kg, batalla 1,04 m).
 - **Frenos** con reparto delante/detrás (~1,2 g a fondo en recta).
 - **Dirección progresiva**: a alta velocidad las ruedas giran muy poco (como en un kart real), con
   recorrido extra para contravolantear.
+- **Choques con impulso real** en el punto de contacto (la esquina que toca la barrera o el otro kart),
+  con rebote de neumático y fricción: un toque en la zaga hace trompear, un roce de refilón apenas frena.
+- **Superficies**: la hierba casi no frena pero no agarra; la grava y la arena sí detienen el kart.
+- **Parado, el kart no se mueve**: los neumáticos no generan fuerza sin velocidad y hay rozamiento
+  estático. En parrilla la IA espera con el volante recto y sale recta por su carril.
+- **Visual fiel**: ruedas y volante con su ángulo real, sin balanceo de coche (un kart no tiene
+  suspensión); con mucho apoyo levanta la rueda trasera interior, y el piloto inclina la cabeza.
 
 `npm run test:physics` mide aceleración, inercia, frenada, agarre lateral, respuesta a un volantazo,
 frenar girando y el efecto del saltito.

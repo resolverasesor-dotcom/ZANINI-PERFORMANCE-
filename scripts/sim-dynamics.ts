@@ -73,14 +73,14 @@ const log = (s: string) => {
 for (const vt of [10, 15, 20, 25]) {
   if (vt > KART.vmax - 1) continue;
   const k = fresh();
-  run(k, 20, (_, i) => (i.throttle = k.vF < vt ? 1 : 0.3));
+  run(k, 20, (_, i) => (i.throttle = k.vF < vt ? 1 : 0));
   let best = 0, at = 0;
   run(k, 8, (t, i) => {
     i.steer = Math.min(1, t / 8);
-    i.throttle = k.vF < vt ? 1 : 0.2;
+    i.throttle = k.vF < vt ? 1 : 0;
   }, (t) => {
     const ay = Math.abs(k.vF * k.yawRate);
-    if (!k.drifting && ay > best && Math.abs(k.vF - vt) < 1.5) { best = ay; at = Math.min(1, t / 8); }
+    if (!k.drifting && ay > best && Math.abs(k.vF - vt) < Math.max(1.5, vt * 0.2)) { best = ay; at = Math.min(1, t / 8); }
   });
   log(`Agarre a ${kmh(vt)} km/h: ${(best / 9.81).toFixed(2)} g laterales (con el volante al ${(at * 100).toFixed(0)} %)`);
 }
@@ -127,5 +127,13 @@ for (const hops of [false, true]) {
     i.hop = hops && Math.floor(t / 0.4) % 2 === 0;
   }, () => (d += k.vF * dt));
   log(`Salida de horquilla ${hops ? 'CON saltitos' : 'sin saltitos'}: ${kmh(k.vF)} km/h a los 3 s · ${d.toFixed(1)} m recorridos`);
+}
+// 9. Parado con el volante girado: no debe moverse ni girar (el fallo de la parrilla)
+{
+  const k = fresh();
+  const x0 = k.x, z0 = k.z, y0 = k.yaw;
+  run(k, 4, (t, i) => (i.steer = Math.sin(t * 3)));
+  const moved = Math.hypot(k.x - x0, k.z - z0);
+  log(`Parado moviendo el volante 4 s: se desplaza ${moved.toFixed(3)} m y gira ${((k.yaw - y0) * 57.3).toFixed(2)}°${moved > 0.01 ? ' · ERROR' : ''}`);
 }
 log(`(pico de agarre del neumático a ${(ALPHA_PEAK * 57.3).toFixed(1)}° de deriva)`);

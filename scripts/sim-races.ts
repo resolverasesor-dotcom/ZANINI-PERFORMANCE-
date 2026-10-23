@@ -27,11 +27,20 @@ for (const def of CIRCUITS) {
     c.kart.respawn = (t) => { respawns++; orig(t); };
   }
   const dt = 1 / 120;
+  // En parrilla nadie debe moverse ni girar mientras se encienden los semáforos
+  const grid0 = sim.comps.map((c) => ({ x: c.kart.x, z: c.kart.z, yaw: c.kart.yaw }));
+  let gridMove = 0;
   let maxOut = 0;
   let steps = 0;
   let wallHits = 0, kartHits = 0, drifts = 0;
   while (sim.phase !== 'finished' && steps < 120 * 900) {
     sim.step(dt, emptyInput(), false);
+    if (sim.phase === 'countdown') {
+      sim.comps.forEach((c, i) => {
+        const g = grid0[i];
+        gridMove = Math.max(gridMove, Math.hypot(c.kart.x - g.x, c.kart.z - g.z), Math.abs(c.kart.yaw - g.yaw) * 2);
+      });
+    }
     for (const c of sim.comps) {
       const p = c.kart.proj;
       const out = p.lat > 0 ? p.lat - p.limR : -p.lat - p.limL;
@@ -44,10 +53,10 @@ for (const def of CIRCUITS) {
     steps++;
   }
   const res = sim.phase === 'finished' ? sim.results() : [];
-  const ok = sim.phase === 'finished' && maxOut < 0.01;
+  const ok = sim.phase === 'finished' && maxOut < 0.01 && gridMove < 0.02;
   if (!ok) fail = true;
   const best = Math.min(...sim.comps.map((c) => c.bestLap ?? 1e9));
-  console.log(`${ok ? 'OK ' : 'ERR'} ${def.name.padEnd(20)} ref(pro)=${ref.toFixed(2)} ref(${diff})=${refN.toFixed(2)} best=${best.toFixed(2)} winner=${res[0]?.entrant.short} t=${sim.time.toFixed(0)}s respawns=${respawns} wallHits=${wallHits} kartHits=${kartHits} drifts=${drifts} maxOut=${maxOut.toFixed(3)} (${Date.now() - t0}ms) ${JSON.stringify((globalThis as any).__aiRespawn)}`); (globalThis as any).__aiRespawn = {};
+  console.log(`${ok ? 'OK ' : 'ERR'} ${def.name.padEnd(20)} ref(pro)=${ref.toFixed(2)} ref(${diff})=${refN.toFixed(2)} best=${best.toFixed(2)} winner=${res[0]?.entrant.short} t=${sim.time.toFixed(0)}s respawns=${respawns} wallHits=${wallHits} kartHits=${kartHits} drifts=${drifts} maxOut=${maxOut.toFixed(3)} parrilla=${gridMove.toFixed(3)} (${Date.now() - t0}ms) ${JSON.stringify((globalThis as any).__aiRespawn)}`); (globalThis as any).__aiRespawn = {};
   if (process.argv[4] === 'v') for (const r of res) console.log(`   ${r.position}. ${r.entrant.short} ${r.total.toFixed(2)} best=${r.bestLap?.toFixed(2)} pen=${r.penalty} down=${r.lapsDown}`);
 }
 process.exit(fail ? 1 : 0);
