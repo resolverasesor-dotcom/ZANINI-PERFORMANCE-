@@ -84,7 +84,11 @@ class KartView {
   events: KartEvent[] = [];
   wallImpact = 0;
   kartImpact = 0;
+  wallScrape = 0;
+  kartScrape = 0;
   prevThrottle = 0;
+  /** Intervalo de vibración del roce / fuera de pista. */
+  buzz = 0;
   private spin = 0;
   constructor(
     readonly comp: Competitor,
@@ -136,7 +140,15 @@ class KartView {
     // Piano: el kart traquetea al ritmo de los resaltes (y se inclina hacia el lado que pisa)
     const kerbBump = k.kerb > 0 && k.speed > 3 ? Math.abs(Math.sin((k.odometer / 0.42) * Math.PI)) * 0.022 * k.kerb : 0;
     if (kerbBump) b.rotation.z += -k.kerbSide * kerbBump * 1.5;
-    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + kerbBump + (k.rumble > 0.5 && k.speed > 5 ? (Math.random() - 0.5) * 0.03 : 0);
+    // Fuera de pista el kart rebota con los baches del terreno (suave, no aleatorio por frame)
+    const offK = k.surface === 'grass' || k.surface === 'sand' || k.surface === 'gravel' ? Math.min(1, k.speed / 10) : 0;
+    const od = k.odometer;
+    const bumpY = offK ? (Math.abs(Math.sin(od * 2.1)) * 0.6 + Math.abs(Math.sin(od * 3.7 + 1.3)) * 0.4) * 0.05 * offK : 0;
+    if (offK) {
+      b.rotation.z += Math.sin(od * 2.9) * 0.025 * offK;
+      b.rotation.x += Math.sin(od * 3.3 + 0.7) * 0.02 * offK;
+    }
+    b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + kerbBump + bumpY;
     // Ruedas delanteras con su ángulo real (a alta velocidad apenas giran)
     for (const p of this.mesh.frontPivots) p.rotation.y = -k.wheelAngle;
     // Piloto: volante, cabeza que mira e inclina hacia la curva
@@ -179,6 +191,7 @@ export class RaceView {
   private replayProj = makeProj();
   private tutorialEnd = 0;
   private skids: SkidMarks;
+  private dirt: SkidMarks;
   private hud: Hud;
   private minimap: Minimap;
   private acc = 0;
@@ -237,6 +250,9 @@ export class RaceView {
     this.scene.add(this.effects.group);
     this.skids = new SkidMarks(quality === 'bajo' ? 500 : 1600);
     this.scene.add(this.skids.mesh);
+    // Rodadas al pisar hierba o arena (tierra levantada)
+    this.dirt = new SkidMarks(quality === 'bajo' ? 300 : 900, '#3b3020', 0.5, 0.26);
+    this.scene.add(this.dirt.mesh);
     for (const c of this.sim.comps) this.views.push(new KartView(c, this.scene, quality !== 'bajo'));
     // Reflejos: entorno generado a partir del cielo del circuito
     if (quality !== 'bajo') {
@@ -450,7 +466,13 @@ export class RaceView {
     pi.hop = ctrl.hop;
     if (this.player && !this.player.ai && this.sim.phase !== 'countdown') this.applyAssists(pi, Math.min(dt, 0.1));
 
-    this.acc += Math.min(dt, 0.1) * DEBUG.timeScale;
+    // Micropausa de impacto (hit-stop) en los golpes fuertes del jugador
+    let ts = 1;
+    if (this.hitStop > 0) {
+      this.hitStop -= dt;
+      ts = 0.2;
+    }
+    this.acc += Math.min(dt, 0.1) * DEBUG.timeScale * ts;
     const player = this.player;
     while (this.acc >= STEP) {
       this.sim.step(STEP, pi, this.respawnReq);
@@ -464,7 +486,7 @@ export class RaceView {
       }
       if (player && !player.finished) {
         const k = player.kart;
-        if (k.wallImpact > 3) this.stats.wallHits++;
+        if (k.wallImpact > 1.5) this.stats.wallHits++;
         if (k.events.includes('hop')) this.stats.hops++;
         if (k.drifting) this.stats.driftTime += STEP;
         this.stats.topSpeed = Math.max(this.stats.topSpeed, k.vF * 3.6);
@@ -475,6 +497,8 @@ export class RaceView {
         for (const e of k.events) v.events.push(e);
         v.wallImpact = Math.max(v.wallImpact, k.wallImpact);
         v.kartImpact = Math.max(v.kartImpact, k.kartImpact);
+        v.wallScrape = Math.max(v.wallScrape, k.wallScrape);
+        v.kartScrape = Math.max(v.kartScrape, k.kartScrape);
       }
       if (player && player.lapsDone > 0) {
         const k = player.kart;
@@ -506,6 +530,8 @@ export class RaceView {
       v.events.length = 0;
       v.wallImpact = 0;
       v.kartImpact = 0;
+      v.wallScrape = 0;
+      v.kartScrape = 0;
     }
     // Un kart pegado a la cámara taparía la vista: se oculta.
     const cp = this.rig.camera.position;
@@ -536,15 +562,30 @@ export class RaceView {
     const slope = (this.track.py[(i0 + 3) % this.track.n] - this.track.py[i0]) / (3 * this.track.ds);
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;
     this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along);
-    if (v.wallImpact > 2) {
-      this.rig.addShake(Math.min(1, v.wallImpact / 10));
-      this.ctx.input.rumble(Math.min(1, v.wallImpact / 12), 180);
+    // Golpes: sacudida, destello rojo, vibración y, si es fuerte, micropausa
+    const hit = Math.max(v.wallImpact, v.kartImpact * 1.2);
+    if (hit > 0.7) {
+      const s = Math.min(1, hit / 7);
+      this.rig.addShake(0.25 + s * 0.9);
+      this.hud.flash(0.25 + s * 0.6);
+      this.ctx.input.rumble(0.35 + s * 0.65, 120 + s * 200);
+      this.vibrate(Math.round(30 + s * 90));
+      if (hit > 4.5) this.hitStop = 0.035 + s * 0.04;
     }
-    if (v.kartImpact > 2) {
-      this.rig.addShake(Math.min(0.6, v.kartImpact / 12));
-      this.ctx.input.rumble(0.4, 100);
-    }
-    if (k.rumble > 0 && sp > 8) this.rig.addShake(0.015 * k.rumble);
+    // Roces continuos (barrera u otro kart) y fuera de pista: temblor y vibración rítmica
+    const scrape = Math.min(1, Math.max(v.wallScrape / 10, v.kartScrape / 6));
+    const off = k.surface === 'grass' || k.surface === 'sand' || k.surface === 'gravel' ? Math.min(1, sp / 12) : 0;
+    if (scrape > 0.05) this.rig.addShake(0.05 * scrape);
+    if (off > 0) this.rig.addShake((k.surface === 'grass' ? 0.035 : 0.06) * off);
+    const buzzK = Math.max(scrape, off * 0.8);
+    if (buzzK > 0.05) {
+      v.buzz -= dt;
+      if (v.buzz <= 0) {
+        v.buzz = 0.1 + (1 - buzzK) * 0.08;
+        this.ctx.input.rumble(0.15 + buzzK * 0.4, 90);
+        this.vibrate(Math.round(10 + buzzK * 18));
+      }
+    } else v.buzz = 0;
     // Piano: temblor de cámara y vibración rítmica del mando / móvil
     if (k.kerb > 0 && sp > 5) {
       this.rig.addShake(0.03 * k.kerb * Math.min(1, sp / 20));
@@ -559,6 +600,12 @@ export class RaceView {
   }
 
   private kerbBuzz = 0;
+
+  /** Vibración del móvil (si hay controles táctiles y está activada). */
+  private vibrate(ms: number): void {
+    if (this.ctx.touchEnabled() && this.ctx.settings.vibration && navigator.vibrate) navigator.vibrate(ms);
+  }
+  private hitStop = 0;
 
   private updateGhost(): void {
     const g = this.ghostMesh;
@@ -603,9 +650,23 @@ export class RaceView {
         } else this.skids.lift(key);
       }
       const off = k.surface === 'grass' || k.surface === 'gravel' || k.surface === 'sand';
-      if (off && k.speed > 4 && Math.random() < 0.7) {
+      const fx = Math.sin(yaw);
+      const fz = Math.cos(yaw);
+      if (off && k.speed > 3) {
+        const sk = Math.min(1, k.speed / 15);
         const c: [number, number, number] = k.surface === 'grass' ? [0.45, 0.5, 0.3] : k.surface === 'sand' ? [0.9, 0.82, 0.6] : [0.78, 0.7, 0.58];
-        this.effects.puff(pos.x - Math.sin(yaw) * 0.9, pos.y, pos.z - Math.cos(yaw) * 0.9, c, 0.8, 0.9, 1.2);
+        if (Math.random() < 0.5 + sk * 0.4) this.effects.puff(pos.x - fx * 0.9, pos.y, pos.z - fz * 0.9, c, 0.7 + sk * 0.6, 0.9, 1.2);
+        // Lo que despiden las ruedas traseras: hierba y tierra, arena o piedrecitas
+        const bits: [number, number, number] = k.surface === 'grass' ? (Math.random() < 0.6 ? [0.3, 0.55, 0.18] : [0.36, 0.27, 0.16]) : c;
+        for (const side of [-1, 1]) {
+          this.effects.debris(pos.x - fx * 0.8 - fz * side * 0.6, pos.y, pos.z - fz * 0.8 + fx * side * 0.6, -fx, -fz, bits, Math.ceil(sk * 2), 2 + sk * 4, k.surface === 'sand' ? 0.1 : 0.08, 0.6, 2.5);
+        }
+      }
+      // Rodadas sobre hierba y arena
+      for (const side of [-1, 1]) {
+        const key = `o${v.comp.id}${side}`;
+        if (off && k.speed > 2) this.dirt.mark(key, pos.x - fx * 0.62 - fz * side * 0.62, pos.y + 0.01, pos.z - fz * 0.62 + fx * side * 0.62);
+        else this.dirt.lift(key);
       }
       // Petardeo al soltar el acelerador a alta velocidad
       const thr = v.comp.input.throttle;
@@ -614,11 +675,30 @@ export class RaceView {
         if (v.comp === this.player || d2 < 20 * 20) this.ctx.audio.pop();
       }
       v.prevThrottle = thr;
-      if (v.wallImpact > 3) {
-        this.effects.impact(pos.x, pos.y, pos.z, v.wallImpact);
-        if (d2 < 30 * 30) this.ctx.audio.hitBarrier(v.wallImpact * (v.comp === this.player ? 1 : 0.5));
+      // Golpes y roces en el punto de contacto real
+      const me = v.comp === this.player;
+      const pan = me ? k.contactSide * 0.6 : 0;
+      const cx = k.contactX;
+      const cz = k.contactZ;
+      if (v.wallImpact > 0.7) {
+        const s = v.wallImpact;
+        // goma de los neumáticos y polvo; la barrera se mueve
+        this.effects.debris(cx, pos.y, cz, -k.contactNX, -k.contactNZ, [0.12, 0.12, 0.13], Math.min(14, 3 + s * 2), 1.5 + s * 0.6, 0.1, 0.7, 2.5);
+        this.effects.puff(cx, pos.y, cz, [0.6, 0.58, 0.55], 0.6 + Math.min(1, s / 6), 0.8, 0.8);
+        if (s > 4) this.effects.impact(cx, pos.y, cz, s * 0.5);
+        this.trackScene.bumpBarrier(cx, cz, k.contactNX, k.contactNZ, s);
+        if (d2 < 30 * 30) this.ctx.audio.hitBarrier(s * (me ? 1 : 0.5), pan);
       }
-      if (v.kartImpact > 1.5 && d2 < 25 * 25) this.ctx.audio.hitKart(v.kartImpact * (v.comp === this.player ? 1 : 0.6));
+      if (v.kartImpact > 0.7) {
+        const s = v.kartImpact;
+        const col = new THREE.Color(v.comp.e.color);
+        this.effects.debris(cx, pos.y + 0.1, cz, -k.contactNX, -k.contactNZ, [col.r, col.g, col.b], Math.min(10, 2 + s * 2), 1 + s * 0.6, 0.07, 0.6, 2);
+        if (s > 2.5) this.effects.scrapeSparks(cx, pos.y, cz, -k.contactNX, -k.contactNZ, Math.min(8, s * 1.5));
+        if (d2 < 25 * 25) this.ctx.audio.hitKart(s * (me ? 1 : 0.6), pan);
+      }
+      // Roce continuo: polvo de goma contra la barrera, chispitas entre karts
+      if (v.wallScrape > 2 && Math.random() < 0.5) this.effects.puff(cx, pos.y, cz, [0.5, 0.5, 0.5], 0.4, 0.5, 0.5);
+      if (v.kartScrape > 2 && Math.random() < 0.35) this.effects.scrapeSparks(cx, pos.y, cz, -k.contactNX, -k.contactNZ, 1);
       for (const e of v.events) {
         if (e === 'kerb' && v.comp !== this.player && d2 < 15 * 15) this.ctx.audio.kerbHit(k.speed * 0.5);
         if (e === 'kerb' && v.comp === this.player) {
@@ -639,6 +719,7 @@ export class RaceView {
     const p = this.player;
     if (!p) return;
     const k = p.kart;
+    const pv = this.views.find((x) => x.comp === p);
     const ratio = Math.abs(k.vF) / KART.vmax;
     const thr = this.playerInput.throttle;
     const moving = k.speed > 1;
@@ -660,10 +741,11 @@ export class RaceView {
         const vs = -(o.vx * ux + o.vz * uz);
         const doppler = clamp((343 + vl) / (343 - vs), 0.88, 1.12);
         const oRpm = clamp(0.14 + (Math.abs(o.vF) / KART.vmax) * 0.85 + c.input.throttle * 0.06, 0, 1.1);
-        return { rpm: oRpm, dist, pan: clamp((ux * rx + uz * rz) * 0.85, -0.85, 0.85), doppler };
+        return { id: c.id, rpm: oRpm, dist, pan: clamp((ux * rx + uz * rz) * 0.85, -0.85, 0.85), doppler };
       })
       .sort((a, b) => a.dist - b.dist)
-      .slice(0, 3);
+      // 4 candidatos para 3 voces: margen para que no se intercambien en cada frame
+      .slice(0, 4);
     this.ctx.audio.updateEngines({ rpm, load: thr }, rivals);
     // Neumáticos: rozamiento al acercarse al límite de agarre y chirrido al deslizar
     const sF = Math.abs(k.slipFront);
@@ -680,7 +762,11 @@ export class RaceView {
         kerb: k.kerb,
         kerbSide: k.kerbSide,
         grass: surf === 'grass' ? 1 : 0,
-        gravel: surf === 'gravel' || surf === 'sand' ? 1 : 0,
+        gravel: surf === 'gravel' ? 1 : 0,
+        sand: surf === 'sand' ? 1 : 0,
+        wallScrape: pv?.wallScrape ?? 0,
+        kartScrape: pv?.kartScrape ?? 0,
+        contactSide: k.contactSide,
         load: thr,
         wind: ratio * ratio,
       },
@@ -942,7 +1028,7 @@ export class RaceView {
     const k = p.kart;
     const ratio = Math.abs(k.vF) / KART.vmax;
     hud.setSpeed(Math.abs(k.vF) * 3.6, ratio, false);
-    hud.setGrip(k.drifting ? Math.abs(Math.atan2(k.vL, Math.max(2, k.vF))) : 0, k.bog > 0.18 && this.playerInput.throttle > 0.5 && k.hopCool <= 0);
+    hud.setGrip(k.drifting ? Math.abs(Math.atan2(k.vL, Math.max(2, k.vF))) : 0, k.bog > 0.18 && this.playerInput.throttle > 0.5 && k.hopCool <= 0 && k.speed > 4 && (k.surface === 'track' || k.surface === 'kerb') && k.wallScrape === 0);
     // En móvil (pantalla pequeña) los efectos de velocidad se suavizan a la mitad
     const fxK = this.ctx.touchEnabled() ? 0.5 : 1;
     this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 * fxK : 0);
@@ -1022,6 +1108,7 @@ export class RaceView {
     this.trackScene.dispose(this.scene);
     this.effects.dispose();
     this.skids.dispose();
+    this.dirt.dispose();
     for (const v of this.views) for (const m of v.mesh.materials) m.dispose();
     this.scene.traverse((o) => {
       if (o instanceof THREE.Mesh && o.geometry && !o.geometry.userData.shared) o.geometry.dispose();

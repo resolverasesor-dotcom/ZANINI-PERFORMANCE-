@@ -153,6 +153,41 @@ export class Effects {
     }
   }
 
+  /**
+   * Trozos despedidos con gravedad (goma de la barrera, plástico de los pontones,
+   * hierba, tierra o arena). (dx, dz) es la dirección principal de salida.
+   */
+  debris(x: number, y: number, z: number, dx: number, dz: number, color: [number, number, number], n: number, speed: number, size = 0.12, life = 0.8, up = 3): void {
+    for (let i = 0; i < n; i++) {
+      if (!this.chance(1)) continue;
+      const v = speed * (0.4 + Math.random() * 0.8);
+      const k = 0.85 + Math.random() * 0.3;
+      this.smoke.emit(
+        x + (Math.random() - 0.5) * 0.3,
+        y + 0.15 + Math.random() * 0.3,
+        z + (Math.random() - 0.5) * 0.3,
+        dx * v + (Math.random() - 0.5) * speed * 0.8,
+        up * (0.4 + Math.random()),
+        dz * v + (Math.random() - 0.5) * speed * 0.8,
+        color[0] * k,
+        color[1] * k,
+        color[2] * k,
+        size * (0.6 + Math.random() * 0.8),
+        life * (0.6 + Math.random() * 0.6),
+        0,
+        9.8,
+      );
+    }
+  }
+
+  /** Chispas cortas de un roce metálico (parachoques de tubo). */
+  scrapeSparks(x: number, y: number, z: number, dx: number, dz: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      if (!this.chance(0.8)) continue;
+      this.sparks.emit(x, y + 0.25, z, dx * 3 + (Math.random() - 0.5) * 4, 1 + Math.random() * 2, dz * 3 + (Math.random() - 0.5) * 4, 1, 0.75, 0.35, 0.12, 0.18 + Math.random() * 0.15, 0, 10);
+    }
+  }
+
   /** Petardeo del escape al levantar el pie: llamarada y humo. */
   backfire(x: number, y: number, z: number, yaw: number): void {
     const fx = Math.sin(yaw);
@@ -184,10 +219,15 @@ export class SkidMarks {
   private dummy = new THREE.Object3D();
   private last = new Map<string, { x: number; z: number }>();
 
-  constructor(private count: number) {
-    const geo = new THREE.PlaneGeometry(0.22, 1);
+  constructor(
+    private count: number,
+    color = '#111',
+    opacity = 0.42,
+    width = 0.22,
+  ) {
+    const geo = new THREE.PlaneGeometry(width, 1);
     geo.rotateX(-Math.PI / 2);
-    const mat = new THREE.MeshBasicMaterial({ color: '#111', transparent: true, opacity: 0.42, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
     this.mesh = new THREE.InstancedMesh(geo, mat, count);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = 1;

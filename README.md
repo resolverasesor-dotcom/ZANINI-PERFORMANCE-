@@ -105,7 +105,20 @@ Todo se sintetiza en el navegador con Web Audio (sin archivos de sonido):
 - **Transmisión y rodadura**: silbido de la cadena (sube con la velocidad), rodadura sobre asfalto,
   hierba, crujido granular de la grava y viento.
 - **Rivales** con estéreo y efecto Doppler al pasar (los 3 más cercanos).
-- **Golpes**: sordo con rebote de goma contra la barrera de neumáticos; "clac" de plástico entre karts.
+- **Golpes y roces**: sordo con rebote de goma contra la barrera de neumáticos; "clac" de plástico entre
+  karts; roce continuo de goma contra la barrera y de plástico contra otro kart (rueda a rueda, por el lado
+  del contacto). Antes solo sonaban golpes de más de 3 m/s y casi todos los contactos son roces.
+- **Fuera de pista**: baches del terreno, roce de la hierba, siseo de arena y crujido de grava.
+- **Sin cortes**: voces de rivales estables (no se intercambian al reordenarse), sin cortes al soltar gas,
+  compresor que no "bombea" y búfer de audio equilibrado para móviles.
+
+## Sensaciones
+
+- **Golpes**: sacudida de cámara, destello rojo en los bordes, micropausa de impacto en los fuertes,
+  vibración del mando y del móvil, trozos de goma o de plástico (del color del kart) y chispas en el
+  punto real de contacto; las pilas de neumáticos golpeadas se desplazan y vuelven a su sitio.
+- **Fuera de pista**: el kart rebota con los baches, la cámara tiembla, vibra el mando/móvil, salen
+  disparadas hierba y tierra (o arena) y quedan rodadas en el suelo.
 - **Ambiente**: murmullo del público y ovación en la salida y en la bandera a cuadros.
 
 ## Circuitos

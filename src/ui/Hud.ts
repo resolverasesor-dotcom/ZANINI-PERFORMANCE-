@@ -38,6 +38,8 @@ export class Hud {
   private flagEl: HTMLDivElement;
   readonly mapSlot: HTMLDivElement;
   readonly speedLines: HTMLCanvasElement;
+  private flashEl: HTMLDivElement;
+  private flashLevel = 0;
   private slCtx: CanvasRenderingContext2D;
 
   constructor(parent: HTMLElement) {
@@ -45,6 +47,8 @@ export class Hud {
     this.speedLines = el('canvas', 'speedlines');
     this.slCtx = this.speedLines.getContext('2d')!;
     this.root.appendChild(this.speedLines);
+    this.flashEl = el('div', 'hit-flash');
+    this.root.appendChild(this.flashEl);
 
     const tl = el('div', 'hud-tl');
     this.posEl = el('div', 'hud-pos');
@@ -265,7 +269,19 @@ export class Hud {
     }
   }
 
+  /** Destello rojo en los bordes de la pantalla al chocar (0..1). */
+  flash(strength: number): void {
+    this.flashLevel = Math.max(this.flashLevel, Math.min(1, strength));
+  }
+
   tick(dt: number): void {
+    if (this.flashLevel > 0.005) {
+      this.flashLevel *= Math.exp(-dt * 5);
+      this.flashEl.style.opacity = this.flashLevel.toFixed(3);
+    } else if (this.flashLevel !== 0) {
+      this.flashLevel = 0;
+      this.flashEl.style.opacity = '0';
+    }
     if (this.msgTimer > 0) {
       this.msgTimer -= dt;
       if (this.msgTimer <= 0) this.msg.classList.remove('show');

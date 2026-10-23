@@ -193,6 +193,16 @@ export class Kart {
   /** Impacto contra muro en el último paso (m/s). */
   wallImpact = 0;
   kartImpact = 0;
+  /** Roce continuo (m/s de deslizamiento en el contacto) contra la barrera y contra otro kart. */
+  wallScrape = 0;
+  kartScrape = 0;
+  /** Lado del contacto respecto al kart (−1 izquierda, 1 derecha) para sonido y efectos. */
+  contactSide = 0;
+  /** Último punto de contacto (mundo) y normal hacia el obstáculo. */
+  contactX = 0;
+  contactZ = 0;
+  contactNX = 0;
+  contactNZ = 0;
   /** Se mantiene por compatibilidad con la repetición: la deriva ya es física. */
   driftVisual = 0;
   /** Temporizador visual del saltito del piloto. */
@@ -254,6 +264,7 @@ export class Kart {
   step(dt: number, inp: KartInput, track: Track): void {
     this.events.length = 0;
     this.wallImpact = 0;
+    this.wallScrape = 0;
     if (this.ghost > 0) this.ghost -= dt;
 
     const surf = SURF[this.surface];
@@ -433,6 +444,16 @@ export class Kart {
     this.throttleVisual = damp(this.throttleVisual, thr, 10, dt);
   }
 
+  /** Guarda el punto de contacto (brazo desde el centro) y la normal hacia el obstáculo. */
+  setContact(ox: number, oz: number, nx: number, nz: number): void {
+    this.contactX = this.x + ox;
+    this.contactZ = this.z + oz;
+    this.contactNX = nx;
+    this.contactNZ = nz;
+    // derecha del kart = (−cos yaw, sin yaw)
+    this.contactSide = Math.sign(nx * -Math.cos(this.yaw) + nz * Math.sin(this.yaw)) || 1;
+  }
+
   /**
    * Superficie, altura y choque contra la barrera. El contacto se resuelve en la
    * esquina del kart que toca (paragolpes o rueda), con impulso, restitución de
@@ -474,6 +495,8 @@ export class Kart {
       this.z -= nz * pen;
       const res = applyImpulse(this, null, ox, oz, 0, 0, nx, nz, KART.wallRestitution, KART.wallFriction);
       if (res > 0) this.wallImpact = res;
+      this.wallScrape = Math.max(this.wallScrape, lastSlide);
+      this.setContact(ox, oz, nx, nz);
       track.project(this.x, this.z, p.idx, p);
     }
     this.y = p.y;
@@ -518,6 +541,9 @@ const BODY_C = [0.3, -0.3];
  * (rax, raz) y (rbx, rbz) son los brazos desde cada centro de gravedad; n apunta de
  * a hacia el obstáculo. Devuelve la velocidad de impacto (m/s) o 0 si se separaban.
  */
+/** Velocidad tangencial (roce) del último contacto resuelto. */
+let lastSlide = 0;
+
 function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: number, rbz: number, nx: number, nz: number, e: number, mu: number): number {
   const m = KART.mass;
   const I = KART.Iz;
@@ -532,6 +558,7 @@ function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: nu
     rvz -= b.vz - wb * rbx;
   }
   const vn = rvx * nx + rvz * nz;
+  lastSlide = Math.hypot(rvx - vn * nx, rvz - vn * nz);
   if (vn <= 0) return 0;
   const cross = (rx: number, rz: number, jx: number, jz: number) => jx * rz - jz * rx;
   const ka = 1 / m + cross(rax, raz, nx, nz) ** 2 / I;
@@ -568,7 +595,10 @@ function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: nu
  * en el punto de contacto (un toque en la zaga hace girar al de delante).
  */
 export function collideKarts(karts: Kart[]): void {
-  for (const k of karts) k.kartImpact = 0;
+  for (const k of karts) {
+    k.kartImpact = 0;
+    k.kartScrape = 0;
+  }
   const R2 = BODY_R * 2;
   for (let i = 0; i < karts.length; i++) {
     const a = karts[i];
@@ -617,6 +647,10 @@ export function collideKarts(karts: Kart[]): void {
       const v = applyImpulse(a, b, pax - a.x, paz - a.z, pax - b.x, paz - b.z, nx, nz, 0.25, 0.3);
       a.kartImpact = Math.max(a.kartImpact, v);
       b.kartImpact = Math.max(b.kartImpact, v);
+      a.kartScrape = Math.max(a.kartScrape, lastSlide);
+      b.kartScrape = Math.max(b.kartScrape, lastSlide);
+      a.setContact(pax - a.x, paz - a.z, nx, nz);
+      b.setContact(pax - b.x, paz - b.z, -nx, -nz);
     }
   }
 }

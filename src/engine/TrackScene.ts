@@ -73,6 +73,12 @@ export class TrackScene {
   private grid: Map<string, number[]> = new Map();
   private readonly cell = 24;
   private venue: VenueParts | null = null;
+  // Barrera de neumáticos animada: las pilas golpeadas se desplazan y vuelven con rebote
+  private tyres3d: THREE.InstancedMesh | null = null;
+  private tyrePts: { x: number; y: number; z: number; yaw: number }[] = [];
+  private tyreGrid = new Map<string, number[]>();
+  private tyreHits = new Map<number, { t: number; amp: number; dx: number; dz: number }>();
+  private tyreDummy = new THREE.Object3D();
   /** Barrera de neumáticos en lugar de muro de hormigón. */
   private get tyres(): boolean {
     const d = this.track.def;
@@ -596,6 +602,14 @@ export class TrackScene {
       const tb = buildTyreBarrier(t, this.quality, onBridge);
       this.disposables.push(tb.geometry, tb.material as THREE.Material, tb);
       this.group.add(tb);
+      this.tyres3d = tb;
+      this.tyrePts = tb.userData.pts;
+      this.tyrePts.forEach((p, i) => {
+        const key = `${Math.floor(p.x / 2)},${Math.floor(p.z / 2)}`;
+        let arr = this.tyreGrid.get(key);
+        if (!arr) this.tyreGrid.set(key, (arr = []));
+        arr.push(i);
+      });
     } else {
       this.wallStrip((i) => -(t.hw[i] + t.runL[i]), yb, yt, wallMat, undefined, 6);
       this.wallStrip((i) => t.hw[i] + t.runR[i], yb, yt, wallMat, undefined, 6, -1);
@@ -1030,7 +1044,47 @@ export class TrackScene {
     }
   }
 
+  /**
+   * Golpe contra la barrera en (x, z): las pilas de neumáticos cercanas se desplazan
+   * hacia fuera (dx, dz) según la fuerza y vuelven a su sitio oscilando.
+   */
+  bumpBarrier(x: number, z: number, dx: number, dz: number, strength: number): void {
+    if (!this.tyres3d) return;
+    const cx = Math.floor(x / 2);
+    const cz = Math.floor(z / 2);
+    for (let a = -1; a <= 1; a++)
+      for (let b = -1; b <= 1; b++) {
+        for (const i of this.tyreGrid.get(`${cx + a},${cz + b}`) ?? []) {
+          const p = this.tyrePts[i];
+          const d = Math.hypot(p.x - x, p.z - z);
+          if (d > 1.8) continue;
+          const amp = Math.min(0.45, strength * 0.05) * (1 - d / 1.8);
+          const cur = this.tyreHits.get(i);
+          if (!cur || cur.amp * Math.exp(-4 * cur.t) < amp) this.tyreHits.set(i, { t: 0, amp, dx, dz });
+        }
+      }
+  }
+
+  private updateTyres(dt: number): void {
+    if (!this.tyres3d || this.tyreHits.size === 0) return;
+    const d = this.tyreDummy;
+    for (const [i, h] of this.tyreHits) {
+      h.t += dt;
+      const p = this.tyrePts[i];
+      // salida rápida y vuelta amortiguada (muelle)
+      const off = h.amp * Math.exp(-3.5 * h.t) * Math.cos(9 * h.t) * Math.min(1, h.t * 30);
+      const done = h.t > 1.6;
+      d.position.set(p.x + (done ? 0 : h.dx * off), p.y - 0.05, p.z + (done ? 0 : h.dz * off));
+      d.rotation.set(done ? 0 : off * 0.6, p.yaw + i * 0.7, 0);
+      d.updateMatrix();
+      this.tyres3d.setMatrixAt(i, d.matrix);
+      if (done) this.tyreHits.delete(i);
+    }
+    this.tyres3d.instanceMatrix.needsUpdate = true;
+  }
+
   update(dt: number, focus: THREE.Vector3): void {
+    this.updateTyres(dt);
     if (this.sun.castShadow) {
       const d = this.sun.userData.dir as THREE.Vector3;
       this.sun.target.position.copy(focus);

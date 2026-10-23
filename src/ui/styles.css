@@ -1979,3 +1979,13 @@ table.results {
     font-size: 22px;
   }
 }
+
+/* Destello de golpe: bordes rojos que se desvanecen */
+.hit-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(215, 38, 30, 0.35) 78%, rgba(120, 0, 0, 0.75) 100%);
+  z-index: 1;
+}

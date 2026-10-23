@@ -91,6 +91,7 @@ export function buildTyreBarrier(track: Track, quality: Quality, skip: (i: numbe
     mesh.setColorAt(i, p.corner ? (Math.floor(i / 3) % 2 ? red : white) : i % 9 === 0 ? white : black);
   });
   mesh.receiveShadow = quality !== 'bajo';
+  mesh.userData.pts = pts;
   return mesh;
 }
 

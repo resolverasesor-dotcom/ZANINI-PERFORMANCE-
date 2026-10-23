@@ -38,10 +38,19 @@ export interface KartSound {
   load: number;
   /** Factor de viento (0..1). */
   wind: number;
+  /** Roce contra la barrera y contra otro kart (m/s de deslizamiento). */
+  wallScrape: number;
+  kartScrape: number;
+  /** Lado del roce (−1 izquierda, 1 derecha). */
+  contactSide: number;
+  /** Arena (además de grava). */
+  sand: number;
 }
 
 /** Rival audible: revoluciones, distancia, panorama estéreo y efecto Doppler. */
 export interface RivalSound {
+  /** Identificador estable: cada rival conserva su voz (sin saltos al reordenar). */
+  id: string;
   rpm: number;
   dist: number;
   pan: number;
@@ -75,10 +84,21 @@ export class AudioEngine {
     kerbRattleF: BiquadFilterNode;
     kerbPan: StereoPannerNode;
     grass: GainNode;
+    grassSwish: GainNode;
+    sandHiss: GainNode;
     gravel: GainNode;
     wind: GainNode;
     crowd: GainNode;
+    wallRub: GainNode;
+    wallRubF: BiquadFilterNode;
+    wallSqueak: GainNode;
+    kartRub: GainNode;
+    contactPan: StereoPannerNode;
   };
+  /** Voz asignada a cada rival audible (por id). */
+  private rivalSlots: (string | null)[] = [];
+  private bumpLevel = 0;
+  private bumpNext = 0;
   private gravelLevel = 0;
   private gravelNext = 0;
   private musicOn = false;
@@ -87,21 +107,29 @@ export class AudioEngine {
   private musicNext = 0;
   private vol = { master: 0.8, sfx: 0.9, music: 0.5 };
   private wantMusic = true;
-  private lastHit = 0;
 
   /** Debe llamarse tras un gesto del usuario. */
   unlock(): void {
     if (!this.ctx) {
       const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
-      this.ctx = new AC();
+      // Búfer "equilibrado": algo más de latencia a cambio de no entrecortarse en móviles
+      try {
+        this.ctx = new AC({ latencyHint: 'balanced' });
+      } catch {
+        this.ctx = new AC();
+      }
       const c = this.ctx;
       this.master = c.createGain();
       this.master.connect(c.destination);
       // Compresor suave para que nada sature.
       const comp = c.createDynamicsCompressor();
-      comp.threshold.value = -14;
-      comp.ratio.value = 4;
+      // Suave y lento: controla picos sin "bombear" (el bombeo se oía como cortes)
+      comp.threshold.value = -10;
+      comp.knee.value = 12;
+      comp.ratio.value = 3;
+      comp.attack.value = 0.01;
+      comp.release.value = 0.3;
       comp.connect(this.master);
       this.sfx = c.createGain();
       this.sfx.connect(comp);
@@ -186,7 +214,7 @@ export class AudioEngine {
     const kerbPan = c.createStereoPanner();
     kerbPan.connect(out);
     const kerbOsc = c.createOscillator();
-    kerbOsc.type = 'square';
+    kerbOsc.type = 'triangle';
     const kerbThump = this.gain();
     kerbOsc.connect(this.filter('lowpass', 180, 1.2)).connect(kerbThump).connect(kerbPan);
     kerbOsc.start();
@@ -200,6 +228,22 @@ export class AudioEngine {
     // Hierba: roce sordo; grava: crujido granular (se dispara aparte)
     const grass = this.gain();
     this.noiseLoop(0.5).connect(this.filter('lowpass', 420, 0.6)).connect(grass).connect(out);
+    // Roce de la hierba en el chasis y los pontones
+    const grassSwish = this.gain();
+    this.noiseLoop(0.9).connect(this.filter('bandpass', 3200, 0.8)).connect(grassSwish).connect(out);
+    // Arena: siseo fino
+    const sandHiss = this.gain();
+    this.noiseLoop(1.1).connect(this.filter('highpass', 2800, 0.7)).connect(sandHiss).connect(out);
+    // Roces: goma contra la barrera de neumáticos y plástico contra otro kart
+    const contactPan = c.createStereoPanner();
+    contactPan.connect(out);
+    const wallRubF = this.filter('lowpass', 420, 0.9);
+    const wallRub = this.gain();
+    this.noiseLoop(0.7).connect(wallRubF).connect(wallRub).connect(contactPan);
+    const wallSqueak = this.gain();
+    this.noiseLoop().connect(this.filter('bandpass', 1700, 6)).connect(wallSqueak).connect(contactPan);
+    const kartRub = this.gain();
+    this.noiseLoop(1.2).connect(this.filter('bandpass', 2400, 1.8)).connect(kartRub).connect(contactPan);
     const gravel = this.gain(1);
     gravel.connect(out);
     // Viento
@@ -208,7 +252,7 @@ export class AudioEngine {
     // Público del kartódromo (murmullo lejano)
     const crowd = this.gain();
     this.noiseLoop(0.35).connect(this.filter('bandpass', 900, 0.4)).connect(crowd).connect(out);
-    this.loops = { scrub, squealF, squeal, roll, rollF, chain, chainG, kerbOsc, kerbThump, kerbRattle, kerbRattleF, kerbPan, grass, gravel, wind, crowd };
+    this.loops = { scrub, squealF, squeal, roll, rollF, chain, chainG, kerbOsc, kerbThump, kerbRattle, kerbRattleF, kerbPan, grass, grassSwish, sandHiss, gravel, wind, crowd, wallRub, wallRubF, wallSqueak, kartRub, contactPan };
   }
 
   private makeEngine(): EngineVoice {
@@ -252,7 +296,8 @@ export class AudioEngine {
     const body = this.gain(1);
     // Tartamudeo al cortar gas
     const stutter = c.createOscillator();
-    stutter.type = 'square';
+    // Borboteo suave al cortar gas (antes era una onda cuadrada y sonaba "cortado")
+    stutter.type = 'sine';
     stutter.frequency.value = 9;
     const stutterDepth = this.gain(0);
     stutter.connect(stutterDepth).connect(body.gain);
@@ -275,14 +320,14 @@ export class AudioEngine {
     v.sub.frequency.setTargetAtTime(f / 2, t, 0.025);
     v.fire.frequency.setTargetAtTime(f, t, 0.025);
     v.raspFilter.frequency.setTargetAtTime(700 + f * 4, t, 0.05);
-    v.rasp.gain.setTargetAtTime(0.06 + load * 0.12, t, 0.05);
-    v.fireDepth.gain.setTargetAtTime(0.05 + load * 0.1, t, 0.05);
+    v.rasp.gain.setTargetAtTime(0.06 + load * 0.12, t, 0.08);
+    v.fireDepth.gain.setTargetAtTime(0.05 + load * 0.1, t, 0.08);
     // Con gas: brillante y lleno. Sin gas: apagado y con tartamudeo (petardeo del 2T)
-    v.tone.frequency.setTargetAtTime(650 + load * 2600 + rpm * 900, t, 0.05);
-    v.stutterDepth.gain.setTargetAtTime((1 - load) * rpm * 0.35, t, 0.08);
+    v.tone.frequency.setTargetAtTime(650 + load * 2600 + rpm * 900, t, 0.08);
+    v.stutterDepth.gain.setTargetAtTime((1 - load) * rpm * 0.12, t, 0.12);
     v.stutter.frequency.setTargetAtTime(7 + rpm * 9, t, 0.1);
     v.pan.pan.setTargetAtTime(pan, t, 0.05);
-    v.out.gain.setTargetAtTime(gain, t, 0.05);
+    v.out.gain.setTargetAtTime(gain, t, 0.08);
   }
 
   /** Motor del jugador y de los rivales más cercanos (con estéreo y Doppler). */
@@ -292,13 +337,23 @@ export class AudioEngine {
     while (this.rivals.length < RIVAL_VOICES) this.rivals.push(this.makeEngine());
     if (player) this.setEngine(this.player, player.rpm, player.load, 0.13 + player.load * 0.07);
     else this.setEngine(this.player, 0, 0, 0);
+    // Asignación estable: un rival conserva su voz mientras siga entre los audibles; las
+    // voces libres se reasignan solo cuando ya están en silencio (sin saltos de tono).
+    while (this.rivalSlots.length < RIVAL_VOICES) this.rivalSlots.push(null);
+    const ids = new Set(rivals.map((r) => r.id));
+    for (let i = 0; i < RIVAL_VOICES; i++) if (this.rivalSlots[i] && !ids.has(this.rivalSlots[i]!)) this.rivalSlots[i] = null;
+    for (const r of rivals) {
+      if (this.rivalSlots.includes(r.id)) continue;
+      const free = this.rivalSlots.indexOf(null);
+      if (free >= 0) this.rivalSlots[free] = r.id;
+    }
     for (let i = 0; i < RIVAL_VOICES; i++) {
-      const r = rivals[i];
+      const r = rivals.find((x) => x.id === this.rivalSlots[i]);
       if (r) {
         // Atenuación por distancia (inversa, suave) y algo más apagados que el propio
         const g = 0.12 / (1 + (r.dist / 9) ** 1.6);
         this.setEngine(this.rivals[i], r.rpm, 0.7, g, r.pan, r.doppler);
-      } else this.setEngine(this.rivals[i], 0, 0, 0);
+      } else this.setEngine(this.rivals[i], 0.3, 0, 0);
     }
   }
 
@@ -322,11 +377,31 @@ export class AudioEngine {
     const bump = Math.max(4, v / KERB_BUMP);
     L.kerbOsc.frequency.setTargetAtTime(bump, t, 0.02);
     const kl = kerb * Math.min(1, v / 12);
-    L.kerbThump.gain.setTargetAtTime(kl * 0.2, t, 0.02);
-    L.kerbRattle.gain.setTargetAtTime(kl * 0.12, t, 0.02);
+    // Ataque rápido y salida algo más lenta: sin "parpadeos" cuando la rueda roza el borde
+    L.kerbThump.gain.setTargetAtTime(kl * 0.2, t, kl > 0 ? 0.03 : 0.09);
+    L.kerbRattle.gain.setTargetAtTime(kl * 0.12, t, kl > 0 ? 0.03 : 0.09);
     L.kerbRattleF.frequency.setTargetAtTime(700 + v * 18, t, 0.05);
     L.kerbPan.pan.setTargetAtTime((k?.kerbSide ?? 0) * 0.35, t, 0.05);
-    L.grass.gain.setTargetAtTime((k?.grass ?? 0) * Math.min(1, v / 10) * 0.4, t, 0.05);
+    const gl = (k?.grass ?? 0) * Math.min(1, v / 10);
+    const sl = (k?.sand ?? 0) * Math.min(1, v / 8);
+    L.grass.gain.setTargetAtTime((gl + sl * 0.6) * 0.55, t, 0.06);
+    L.grassSwish.gain.setTargetAtTime(gl * 0.07, t, 0.06);
+    L.sandHiss.gain.setTargetAtTime(sl * 0.09, t, 0.06);
+    // Baches del terreno: golpes graves del chasis contra el suelo irregular
+    this.bumpLevel = Math.max(gl, sl, this.gravelLevel);
+    while (this.bumpLevel > 0.05 && this.bumpNext < t + 0.12) {
+      if (this.bumpNext < t) this.bumpNext = t;
+      this.thud(this.bumpNext, 0.25 * this.bumpLevel * (0.5 + Math.random()));
+      this.bumpNext += 0.07 + Math.random() * 0.22 / (0.4 + Math.min(1, v / 15));
+    }
+    // Roces con la barrera y con otros karts
+    const wr = Math.min(1, (k?.wallScrape ?? 0) / 10);
+    const kr = Math.min(1, (k?.kartScrape ?? 0) / 6);
+    L.wallRub.gain.setTargetAtTime(wr * 0.65, t, wr > 0 ? 0.02 : 0.08);
+    L.wallRubF.frequency.setTargetAtTime(300 + wr * 500, t, 0.05);
+    L.wallSqueak.gain.setTargetAtTime(wr * 0.12, t, wr > 0 ? 0.02 : 0.08);
+    L.kartRub.gain.setTargetAtTime(kr * 0.45, t, kr > 0 ? 0.02 : 0.08);
+    L.contactPan.pan.setTargetAtTime((k?.contactSide ?? 0) * 0.6, t, 0.05);
     this.gravelLevel = (k?.gravel ?? 0) * Math.min(1, v / 8);
     // Crujido de grava: granitos de ruido a un ritmo que crece con la velocidad
     while (this.gravelLevel > 0.05 && this.gravelNext < t + 0.1) {
@@ -341,6 +416,22 @@ export class AudioEngine {
   silenceLoops(): void {
     this.updateLoops(null, 0);
     this.updateEngines(null, []);
+  }
+
+  /** Golpe grave corto (baches fuera de pista). */
+  private thud(t: number, peak: number): void {
+    const c = this.ctx!;
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(70 + Math.random() * 30, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + 0.09);
+    const g = c.createGain();
+    o.connect(g).connect(this.sfx);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.001, peak), t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.start(t);
+    o.stop(t + 0.14);
   }
 
   /** Grano corto de ruido (crujidos). */
@@ -399,31 +490,80 @@ export class AudioEngine {
     src.stop(t + dur + 0.05);
   }
 
-  /** Golpe contra la barrera de neumáticos: sordo, con rebote de goma. */
-  hitBarrier(strength: number): void {
+  private lastWallHit = 0;
+  private lastKartHit = 0;
+
+  /**
+   * Golpe contra la barrera de neumáticos: "bum" grave del impacto, rebote de la goma
+   * de los neumáticos apilados, crujido del pontón y, si es fuerte, el chasis que suena.
+   */
+  hitBarrier(strength: number, pan = 0): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    if (now - this.lastHit < 0.12) return;
-    this.lastHit = now;
-    const s = Math.min(1, strength / 12);
-    this.tone(75 + s * 25, 0.22 + s * 0.15, 'sine', 0.35 + s * 0.45, 0, 38);
-    this.noiseBurst(0.12 + s * 0.15, 0.2 + s * 0.4, 380 + s * 300);
-    // rebote de los neumáticos apilados
-    this.tone(60, 0.15, 'sine', 0.12 + s * 0.2, 0.11 + s * 0.04, 40);
-    // crujido del parachoques de plástico en golpes fuertes
-    if (s > 0.35) this.noiseBurst(0.06, 0.15 * s, 2600, 'highpass', 0.01);
+    if (now - this.lastWallHit < 0.09) return;
+    this.lastWallHit = now;
+    const s = Math.min(1, strength / 8);
+    const out = this.panned(pan);
+    this.toneTo(out, 62 + s * 20, 0.28 + s * 0.2, 'sine', 0.45 + s * 0.5, 0, 34);
+    this.noiseTo(out, 0.16 + s * 0.2, 0.3 + s * 0.45, 320 + s * 260, 'lowpass');
+    // rebote de goma ("boing" corto) de los neumáticos
+    this.toneTo(out, 150 + s * 40, 0.16, 'triangle', 0.1 + s * 0.18, 0.05, 85);
+    this.toneTo(out, 70, 0.14, 'sine', 0.12 + s * 0.22, 0.12 + s * 0.05, 45);
+    // plástico del pontón y chasis
+    if (s > 0.2) this.noiseTo(out, 0.07, 0.12 + s * 0.3, 2400, 'highpass', 0.005);
+    if (s > 0.55) this.toneTo(out, 420, 0.25, 'square', 0.05 * s, 0.01, 380);
   }
 
-  /** Contacto entre karts: plástico de los pontones y parachoques. */
-  hitKart(strength: number): void {
+  /** Contacto entre karts: golpe de plástico de pontones y parachoques y del chasis. */
+  hitKart(strength: number, pan = 0): void {
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    if (now - this.lastHit < 0.1) return;
-    this.lastHit = now;
-    const s = Math.min(1, strength / 8);
-    this.noiseBurst(0.05 + s * 0.05, 0.18 + s * 0.35, 2200, 'highpass');
-    this.tone(320 + s * 120, 0.07, 'square', 0.06 + s * 0.12, 0, 180);
-    this.tone(110, 0.1, 'sine', 0.1 + s * 0.25, 0, 60);
+    if (now - this.lastKartHit < 0.08) return;
+    this.lastKartHit = now;
+    const s = Math.min(1, strength / 5);
+    const out = this.panned(pan);
+    this.noiseTo(out, 0.06 + s * 0.06, 0.25 + s * 0.45, 2000, 'highpass');
+    this.noiseTo(out, 0.1, 0.15 + s * 0.3, 900, 'bandpass', 0.004);
+    this.toneTo(out, 330 + s * 140, 0.08, 'square', 0.06 + s * 0.12, 0, 190);
+    this.toneTo(out, 105, 0.13, 'sine', 0.18 + s * 0.35, 0, 55);
+  }
+
+  /** Nodo con panorama estéreo que se libera solo cuando acaba el efecto. */
+  private panned(pan: number): AudioNode {
+    const p = this.ctx!.createStereoPanner();
+    p.pan.value = Math.max(-1, Math.min(1, pan));
+    p.connect(this.sfx);
+    setTimeout(() => p.disconnect(), 1500);
+    return p;
+  }
+
+  private toneTo(out: AudioNode, freq: number, dur: number, type: OscillatorType, peak: number, at = 0, slideTo?: number): void {
+    const c = this.ctx!;
+    const o = c.createOscillator();
+    o.type = type;
+    const g = c.createGain();
+    o.connect(g).connect(out);
+    const t = c.currentTime + at;
+    o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    this.env(g, Math.min(1, peak), 0.004, dur, at);
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+
+  private noiseTo(out: AudioNode, dur: number, peak: number, freq: number, type: BiquadFilterType, at = 0): void {
+    const c = this.ctx!;
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    const f = c.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = freq;
+    const g = c.createGain();
+    src.connect(f).connect(g).connect(out);
+    const t = c.currentTime + at;
+    this.env(g, Math.min(1, peak), 0.003, dur, at);
+    src.start(t, Math.random());
+    src.stop(t + dur + 0.05);
   }
 
   /** Entrada en el piano: el primer "trrrac" (y vibración en el mando). */
