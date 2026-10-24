@@ -79,7 +79,8 @@ for (const vt of [10, 15, 20, 25]) {
     i.steer = Math.min(1, t / 8);
     i.throttle = k.vF < vt ? 1 : 0;
   }, (t) => {
-    const ay = Math.abs(k.vF * k.yawRate);
+    // aceleración lateral real del chasis (no v·r, que exagera en los transitorios)
+    const ay = Math.abs(k.ay);
     if (!k.drifting && ay > best && Math.abs(k.vF - vt) < Math.max(1.5, vt * 0.2)) { best = ay; at = Math.min(1, t / 8); }
   });
   log(`Agarre a ${kmh(vt)} km/h: ${(best / 9.81).toFixed(2)} g laterales (con el volante al ${(at * 100).toFixed(0)} %)`);
@@ -119,7 +120,7 @@ for (const [st, bt] of [[0.5, 0.6], [0.8, 0.9]] as const) {
 // 8. Saltitos a la salida de una horquilla
 for (const hops of [false, true]) {
   const k = fresh();
-  run(k, 20, (_, i) => (i.throttle = k.vF < 8 ? 1 : 0.2));
+  run(k, 20, (_, i) => (i.throttle = k.vF < 8 ? 1 : 0));
   let d = 0;
   run(k, 3, (t, i) => {
     i.throttle = 1;
@@ -135,5 +136,13 @@ for (const hops of [false, true]) {
   run(k, 4, (t, i) => (i.steer = Math.sin(t * 3)));
   const moved = Math.hypot(k.x - x0, k.z - z0);
   log(`Parado moviendo el volante 4 s: se desplaza ${moved.toFixed(3)} m y gira ${((k.yaw - y0) * 57.3).toFixed(2)}°${moved > 0.01 ? ' · ERROR' : ''}`);
+}
+// 10. Rueda trasera interior: se despega por las cargas reales (transferencia + jacking)
+for (const [vt, st] of [[8, 0.6], [14, 0.25], [22, 0.08]] as const) {
+  const k = fresh();
+  run(k, 20, (_, i) => (i.throttle = k.vF < vt ? 1 : 0));
+  run(k, 2.5, (_, i) => { i.steer = st; i.throttle = k.vF < vt ? 0.8 : 0; });
+  const inner = k.lift[3] > k.lift[2] ? 3 : 2;
+  log(`Curva a ${kmh(k.vF)} km/h (volante ${st * 100} %, ${(k.ay / 9.81).toFixed(2)} g): carga ruedas ${k.load.map((x) => x.toFixed(0)).join('/')} N · trasera interior ${k.lift[inner] > 0.002 ? `levantada ${(k.lift[inner] * 100).toFixed(1)} cm` : 'apoyada'}`);
 }
 log(`(pico de agarre del neumático a ${(ALPHA_PEAK * 57.3).toFixed(1)}° de deriva)`);

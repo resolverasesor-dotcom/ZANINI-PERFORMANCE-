@@ -153,6 +153,7 @@ export class AIDriver {
       // apuntar hacia dentro con más decisión
       inp.steer = clamp(inp.steer - sign(k.proj.lat) * 0.15, -1, 1);
     }
+    inp.hold = false;
     const err = target - v;
     if (err > 0.4) {
       inp.throttle = 1;
@@ -172,10 +173,11 @@ export class AIDriver {
     this.hopPrev = inp.hop;
 
     if (!w.racing) {
-      // En parrilla: quieto y con el volante recto
+      // En parrilla: quieto, con el freno pisado y el volante recto
       inp.steer = 0;
       inp.throttle = 0;
-      inp.brake = 0;
+      inp.brake = 1;
+      inp.hold = true;
       inp.hop = false;
       this.stuckTime = 0;
       return inp;

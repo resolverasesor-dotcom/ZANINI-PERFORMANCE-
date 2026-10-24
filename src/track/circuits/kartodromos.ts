@@ -34,7 +34,7 @@ export const nucia: TrackDef = {
   ...kd,
   startAt: 0.1601,
   laps: 8,
-  record: { time: 48.2, holder: 'L. Pérez' },
+  record: { time: 51.0, holder: 'L. Pérez' },
   length: 825,
   difficulty: 2,
   decor: [
@@ -68,7 +68,7 @@ export const finestrat: TrackDef = {
   ...kd,
   startAt: 0.1415,
   laps: 8,
-  record: { time: 44.4, holder: 'M. Soler' },
+  record: { time: 46.9, holder: 'M. Soler' },
   length: 862,
   difficulty: 3,
   decor: [
@@ -104,7 +104,7 @@ export const elche: TrackDef = {
   ...kd,
   startAt: 0.1230,
   laps: 8,
-  record: { time: 50.1, holder: 'J. Botella' },
+  record: { time: 52.5, holder: 'J. Botella' },
   length: 1090,
   difficulty: 2,
   decor: [
@@ -140,7 +140,7 @@ export const santaPola: TrackDef = {
   ...kd,
   startAt: 0.1674,
   laps: 10,
-  record: { time: 41.9, holder: 'S. Mira' },
+  record: { time: 44.8, holder: 'S. Mira' },
   length: 681,
   difficulty: 4,
   decor: [
@@ -181,7 +181,7 @@ export const xabia: TrackDef = {
   ...kd,
   startAt: 0.1567,
   laps: 8,
-  record: { time: 47.2, holder: 'C. Ferrándiz' },
+  record: { time: 49.8, holder: 'C. Ferrándiz' },
   length: 817,
   difficulty: 3,
   decor: [
@@ -221,7 +221,7 @@ export const internacional: TrackDef = {
   startAt: 0.1175,
   width: 9,
   laps: 7,
-  record: { time: 56.9, holder: 'A. Zanini' },
+  record: { time: 59.8, holder: 'A. Zanini' },
   length: 1158,
   difficulty: 3,
   decor: [

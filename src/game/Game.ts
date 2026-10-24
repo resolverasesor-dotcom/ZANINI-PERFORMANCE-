@@ -1084,6 +1084,7 @@ export class Game {
         ${this.choice('Controles táctiles', 'touch', [['auto', 'Auto'], ['on', 'Siempre'], ['off', 'Nunca']], s.touch)}
         ${this.choice('Dirección táctil', 'touchsteer', [['pad', 'Barra deslizante'], ['botones', 'Flechas'], ['inclinar', 'Inclinar el móvil']], s.touchSteer)}
         ${this.choice('Aceleración automática (táctil)', 'autoaccel', [['on', 'Sí'], ['off', 'No']], s.autoAccel ? 'on' : 'off')}
+        ${this.choice('Dirección progresiva (filtro del mando)', 'steerfilter', [['on', 'Sí'], ['off', 'No: giro real completo']], s.steerFilter ? 'on' : 'off')}
         ${this.choice('Vibración del mando', 'vibration', [['on', 'Sí'], ['off', 'No']], s.vibration ? 'on' : 'off')}`;
     } else {
       body = `${this.choice('Cámara', 'camera', [['trasera', 'Trasera'], ['cercana', 'Cercana'], ['capo', 'Capó']], s.camera)}
@@ -1159,6 +1160,11 @@ export class Game {
         },
         touchsteer: (b) => {
           s.touchSteer = b.dataset.val as Settings['touchSteer'];
+          save();
+          re();
+        },
+        steerfilter: (b) => {
+          s.steerFilter = b.dataset.val === 'on';
           save();
           re();
         },

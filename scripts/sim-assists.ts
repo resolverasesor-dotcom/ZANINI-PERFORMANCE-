@@ -5,6 +5,7 @@ import { Track } from '../src/track/Track';
 import { computeRacingLine } from '../src/ai/RacingLine';
 import { Kart, setKartClass, emptyInput } from '../src/physics/Kart';
 import { DriverAssist } from '../src/race/assists';
+import { filterSteer } from '../src/core/steerFilter';
 import { AIDriver } from '../src/ai/AIDriver';
 import { KERB_WIDTH } from '../src/track/Track';
 import type { AssistLevel } from '../src/core/Settings';
@@ -36,6 +37,8 @@ for (const level of ((process.argv[3] ?? 'media,maxima').split(',')) as AssistLe
         const d = delay.length > 30 ? delay.shift()! : 0;
         inp.steer = Math.max(-1, Math.min(1, d * 1.15 + Math.sin(i / 37) * 0.25));
       }
+      // Misma cadena que en el juego: filtro de entrada del mando y después la ayuda
+      inp.steer = filterSteer(inp.steer, k.vF, true);
       assist.apply(inp, level, dt);
       k.step(dt, inp, t);
       let ds = k.proj.s - last;

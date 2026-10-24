@@ -63,30 +63,40 @@ Consejos para ir rápido:
 
 ## Física del kart
 
-No es física arcade: es un modelo de vehículo de dos ejes ("bicicleta") integrado a 480 Hz,
-con los valores de un kart de 125 cc con piloto (165 kg, batalla 1,04 m).
+Vehículo de **4 ruedas** integrado a 960 Hz (8 subpasos por paso de 120 Hz), con los valores de un
+kart de 125 cc con piloto (165 kg, batalla 1,04 m, vías 1,10 / 1,36 m). Nada de atajos: el derrape,
+el arrastre del eje en curva y la rueda trasera interior en el aire **salen** del modelo.
 
-- **Neumáticos** con curva de fórmula mágica: el agarre crece con el ángulo de deriva hasta ~6° y
-  luego cae. Por eso el derrape aparece solo cuando un eje pasa del pico, y se recupera contravolanteando.
-- **Transferencia de carga**: al frenar el peso va delante y la zaga se suelta; al acelerar, al revés.
-  El agarre depende de la carga (un neumático muy cargado rinde proporcionalmente menos).
-- **Eje trasero rígido**: en curva la rueda interior tiene que patinar, lo que frena el kart y
-  hace que gire peor en las curvas lentas. El **saltito** lo alivia, como en la realidad.
-- **Motor limitado por potencia** (~15 kW): empuja fuerte desde parado y cada vez menos arriba.
-  Resistencia aerodinámica, rodadura y freno motor de transmisión directa: soltar el gas apenas frena.
-- **Frenos** con reparto delante/detrás (~1,2 g a fondo en recta).
-- **Dirección progresiva**: a alta velocidad las ruedas giran muy poco (como en un kart real), con
-  recorrido extra para contravolantear.
-- **Choques con impulso real** en el punto de contacto (la esquina que toca la barrera o el otro kart),
-  con rebote de neumático y fricción: un toque en la zaga hace trompear, un roce de refilón apenas frena.
-- **Superficies**: la hierba casi no frena pero no agarra; la grava y la arena sí detienen el kart.
-- **Parado, el kart no se mueve**: los neumáticos no generan fuerza sin velocidad y hay rozamiento
-  estático. En parrilla la IA espera con el volante recto y sale recta por su carril.
-- **Visual fiel**: ruedas y volante con su ángulo real, sin balanceo de coche (un kart no tiene
-  suspensión); con mucho apoyo levanta la rueda trasera interior, y el piloto inclina la cabeza.
+- **Cargas por rueda**: estáticas + transferencia longitudinal (frenar/acelerar) + transferencia lateral
+  repartida entre ejes por la rigidez del chasis + **jacking del avance de pivote** (al girar las ruedas
+  pasa carga en diagonal y se descarga la trasera interior). Con un retardo por la flexión del chasis.
+  Si una rueda se queda sin carga, se despega y su carga pasa a la otra del eje.
+- **Neumático completo** (`src/physics/tyre.ts`): deslizamiento combinado longitudinal (κ) + lateral (α)
+  con curva de fórmula mágica (acelerar o frenar a fondo deja menos agarre lateral), sensibilidad a la
+  carga, longitud de relajación (la fuerza lateral se construye al rodar; estable también parado) y
+  resistencia a la rodadura. Delanteros 10x4.50 y traseros 11x7.10, con parámetros distintos.
+- **Eje trasero macizo**: las dos ruedas traseras giran a la misma velocidad. En curva la interior
+  patina hacia delante y la exterior frena: el arrastre y el par que se opone al giro salen solos, y
+  desaparecen cuando la rueda interior se levanta.
+- **Ruedas con inercia**: eje trasero (con corona, disco y motor reducido) y cada rueda delantera libre;
+  se ve y se oye el patinaje al acelerar y el bloqueo al frenar.
+- **Motor** con potencia limitada, embrague centrífugo (en parado sube de vueltas), limitador y freno
+  motor de transmisión directa; las revoluciones del sonido son las del eje trasero.
+- **Frenos**: disco trasero sobre el eje y delanteros por rueda, con bloqueo real.
+- **Dirección con geometría Ackermann** (cada rueda delantera su ángulo) y ángulo máximo fijo de 23°:
+  la física **no** reduce la dirección con la velocidad. Como con teclado o pantalla no se puede dosificar
+  2–3° de volante a 90 km/h, hay un **filtro de entrada del mando** (`src/core/steerFilter.ts`, se puede
+  quitar en *Ajustes → Controles*), fuera de la física.
+- **Saltito**: el piloto se levanta y echa el cuerpo hacia fuera y hacia delante. No multiplica nada: cambia
+  el reparto de cargas (el peso total se conserva), descarga la trasera interior y libera el eje. Ayuda a
+  girar en las curvas lentas; al límite puede hacer que la zaga se suelte.
+- **Balanceo, cabeceo y rueda levantada visibles** calculados a partir de las cargas de cada rueda.
+- **Ayudas** (capa aparte, como en un coche): control de estabilidad y de tracción, frenada automática
+  y copiloto. No modifican la física.
+- En parrilla los pilotos sujetan el kart con el freno (no hay marcha atrás al sujetar).
 
-`npm run test:physics` mide aceleración, inercia, frenada, agarre lateral, respuesta a un volantazo,
-frenar girando y el efecto del saltito.
+`npm run test:physics` mide aceleración, inercia, frenada, agarre lateral (~1,5 g), volantazo, frenar
+girando, saltito, kart parado y la carga de cada rueda en curva.
 
 ## Sonido
 
@@ -261,8 +271,7 @@ grandstand, tyres, banner, cone, crate, promenade`. `sea` añade mar (ver `costa
 src/
   core/      utilidades, entrada (teclado/mando/táctil), ajustes, guardado
   track/     circuitos como datos + Track (muestreo de la spline, proyecciones)
-  physics/   física del kart: modelo de bicicleta con neumáticos no lineales, transferencia de
-             carga, eje trasero rígido, motor limitado por potencia, rebufo, colisiones
+  physics/   vehículo de 4 ruedas (cargas por rueda, eje macizo, neumático combinado), colisiones
   ai/        pilotos, línea de carrera y conductor IA
   race/      simulación de sesión y reglamento, fantasma/récords, campeonato
   engine/    render: escena del circuito, kart low-poly, partículas, cámara, texturas

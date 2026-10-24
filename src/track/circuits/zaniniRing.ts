@@ -30,7 +30,7 @@ export const zaniniRing: TrackDef = {
   surface: 'grass',
   startAt: 0.1636,
   laps: 5,
-  record: { time: 35.0, holder: 'M. Zanini' },
+  record: { time: 36.6, holder: 'M. Zanini' },
   length: 792,
   difficulty: 1,
   decor: [

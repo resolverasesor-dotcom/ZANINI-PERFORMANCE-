@@ -246,7 +246,9 @@ export class RaceSim {
           // En parrilla el freno no engrana la marcha atrás.
           this.gridInput.throttle = inp.throttle;
           this.gridInput.steer = inp.steer;
-          this.gridInput.brake = 0;
+          // En parrilla el piloto sujeta el kart con el freno (sin marcha atrás)
+          this.gridInput.brake = 1;
+          this.gridInput.hold = true;
           this.gridInput.hop = false;
           inp = this.gridInput;
         }

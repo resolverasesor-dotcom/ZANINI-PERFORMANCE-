@@ -1,3 +1,4 @@
+import { filterSteer } from '../core/steerFilter';
 import * as THREE from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { DIFF_SPEED, type Difficulty } from '../ai/Drivers';
@@ -90,6 +91,7 @@ class KartView {
   /** Intervalo de vibración del roce / fuera de pista. */
   buzz = 0;
   private spin = 0;
+  private spinW = [0, 0, 0];
   constructor(
     readonly comp: Competitor,
     scene: THREE.Scene,
@@ -130,13 +132,11 @@ class KartView {
     r.rotation.x = damp(r.rotation.x, -Math.atan(slope * along), 10, dt);
     const b = this.mesh.body;
     b.rotation.y = 0;
-    // Un kart no tiene suspensión: no balancea como un coche. Con mucho apoyo lateral
-    // (>0,9 g) el chasis se retuerce y levanta la rueda trasera interior.
+    // Balanceo y cabeceo calculados por la física a partir de la carga de cada rueda:
+    // aplastamiento de los neumáticos y rueda trasera interior despegada del suelo.
     const ay = k.yawRate * Math.max(0, k.vF);
-    const roll = -Math.sign(ay) * clamp((Math.abs(ay) - 9) / 7, 0, 1) * 0.07;
-    b.rotation.z = damp(b.rotation.z, roll, 10, dt);
-    // Cabeceo leve: morro abajo al frenar, arriba al acelerar
-    b.rotation.x = damp(b.rotation.x, clamp(-k.ax * 0.0025, -0.03, 0.02), 10, dt);
+    b.rotation.z = damp(b.rotation.z, k.chassisRoll, 20, dt);
+    b.rotation.x = damp(b.rotation.x, k.chassisPitch, 20, dt);
     // Piano: el kart traquetea al ritmo de los resaltes (y se inclina hacia el lado que pisa)
     const kerbBump = k.kerb > 0 && k.speed > 3 ? Math.abs(Math.sin((k.odometer / 0.42) * Math.PI)) * 0.022 * k.kerb : 0;
     if (kerbBump) b.rotation.z += -k.kerbSide * kerbBump * 1.5;
@@ -149,8 +149,10 @@ class KartView {
       b.rotation.x += Math.sin(od * 3.3 + 0.7) * 0.02 * offK;
     }
     b.position.y = (k.hop > 0 ? Math.sin((k.hop / 0.16) * Math.PI) * 0.07 : 0) + kerbBump + bumpY;
-    // Ruedas delanteras con su ángulo real (a alta velocidad apenas giran)
-    for (const p of this.mesh.frontPivots) p.rotation.y = -k.wheelAngle;
+    // Ruedas delanteras con su ángulo real, cada una el suyo (Ackermann).
+    // En el modelo, la rueda [0] es la derecha (x local positiva = izquierda).
+    this.mesh.frontPivots[0].rotation.y = -k.wheelSteer[1];
+    this.mesh.frontPivots[1].rotation.y = -k.wheelSteer[0];
     // Piloto: volante, cabeza que mira e inclina hacia la curva
     // Volante con desmultiplicación ~1:3 respecto a las ruedas, más la intención del piloto
     this.mesh.steering.rotation.z = clamp(k.wheelAngle * 3.2 + k.steer * 0.25, -1.6, 1.6);
@@ -166,8 +168,13 @@ class KartView {
       const braking = this.comp.input.brake > 0.1 && k.vF > 1;
       this.mesh.brakeMat.color.setRGB(braking ? 6 : 0.25, braking ? 0.35 : 0.02, braking ? 0.25 : 0.02);
     }
-    this.spin += (k.vF * dt) / 0.16;
-    for (const w of this.mesh.wheels) w.rotation.x = this.spin;
+    // Cada rueda gira a su velocidad real: se ve el patinaje al acelerar y el bloqueo al frenar
+    this.spinW[0] += k.frontW[1] * dt;
+    this.spinW[1] += k.frontW[0] * dt;
+    this.spinW[2] += k.axleW * dt;
+    this.mesh.wheels[0].rotation.x = this.spinW[0];
+    this.mesh.wheels[1].rotation.x = this.spinW[1];
+    this.mesh.wheels[2].rotation.x = this.mesh.wheels[3].rotation.x = this.spinW[2];
     wavePennant(this.mesh, performance.now() / 1000, Math.abs(k.vF));
     this.mesh.flame.visible = false;
   }
@@ -459,7 +466,8 @@ export class RaceView {
     if (!this.endPrompt.classList.contains('hidden')) navigate(this.endPrompt, ctrl.nav);
 
     const pi = this.playerInput;
-    pi.steer = ctrl.steer;
+    // Filtro de entrada del mando (la física no limita la dirección)
+    pi.steer = filterSteer(ctrl.steer, this.player?.kart.vF ?? 0, this.ctx.settings.steerFilter !== false);
     // Con aceleración automática no se acelera en parrilla (evita la salida anticipada)
     pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
     pi.brake = ctrl.brake;
@@ -723,7 +731,9 @@ export class RaceView {
     const ratio = Math.abs(k.vF) / KART.vmax;
     const thr = this.playerInput.throttle;
     const moving = k.speed > 1;
-    const rpm = moving ? clamp(0.14 + ratio * 0.82 + thr * 0.08, 0, 1.1) : 0.12 + thr * 0.55;
+    // Revoluciones reales del motor (eje trasero × desarrollo; embrague patinando en parado)
+    const rpm = clamp(k.rpm + thr * 0.04, 0, 1.1);
+    void moving;
     // Rivales: los 3 más cercanos, con estéreo (respecto al morro del jugador) y Doppler
     const rx = -Math.cos(k.yaw);
     const rz = Math.sin(k.yaw);
@@ -740,7 +750,7 @@ export class RaceView {
         const vl = k.vx * ux + k.vz * uz;
         const vs = -(o.vx * ux + o.vz * uz);
         const doppler = clamp((343 + vl) / (343 - vs), 0.88, 1.12);
-        const oRpm = clamp(0.14 + (Math.abs(o.vF) / KART.vmax) * 0.85 + c.input.throttle * 0.06, 0, 1.1);
+        const oRpm = clamp(o.rpm + c.input.throttle * 0.04, 0, 1.1);
         return { id: c.id, rpm: oRpm, dist, pan: clamp((ux * rx + uz * rz) * 0.85, -0.85, 0.85), doppler };
       })
       .sort((a, b) => a.dist - b.dist)

@@ -1,13 +1,16 @@
 import { clamp, damp, sign, wrapAngle } from '../core/math';
 import { KERB_WIDTH, makeProj, type Track, type TrackProj } from '../track/Track';
+import { TYRE_FRONT, TYRE_REAR, tyreForce, type TyreOut, type TyreParams } from './tyre';
 
 export interface KartInput {
   throttle: number;
   brake: number;
-  /** -1 izquierda … 1 derecha */
+  /** -1 izquierda … 1 derecha (volante a tope = ángulo máximo de las ruedas). */
   steer: number;
-  /** "Saltito": el piloto descarga peso desde el asiento para liberar el eje trasero. */
+  /** "Saltito": el piloto se levanta del asiento y desplaza su peso (cambia las cargas de las ruedas). */
   hop: boolean;
+  /** Freno pisado para sujetar el kart (en parrilla): frena pero nunca engrana la marcha atrás. */
+  hold?: boolean;
 }
 
 export function emptyInput(): KartInput {
@@ -15,61 +18,69 @@ export function emptyInput(): KartInput {
 }
 
 /**
- * Parámetros físicos de un kart de competición 125 cc con piloto (unidades SI).
- * Modelo "bicicleta" con neumáticos de fórmula mágica simplificada, transferencia
- * de carga longitudinal, eje trasero rígido y motor limitado por potencia.
+ * Parámetros de un kart de competición 125 cc con piloto (unidades SI).
+ * Vehículo de 4 ruedas: cargas por rueda con transferencia longitudinal y
+ * lateral, efecto "jacking" del avance de pivote, eje trasero macizo (las dos
+ * ruedas traseras giran a la misma velocidad), ruedas delanteras libres,
+ * dirección con geometría Ackermann, motor con embrague centrífugo y frenos
+ * delante y detrás.
  */
 export const KART = {
   /** Velocidad punta (limitador de vueltas del motor), m/s. */
   vmax: 30,
+  /** Masa total kart + piloto y masa del piloto (kg). */
   mass: 165,
+  driverMass: 75,
   /** Momento de inercia en guiñada (kg·m²). */
-  Iz: 58,
+  Iz: 55,
   /** Distancia del centro de gravedad al eje delantero / trasero (m). Batalla 1,04 m. */
   a: 0.58,
   b: 0.46,
   /** Altura del centro de gravedad (m). */
-  h: 0.22,
-  /** Vía trasera (m). */
-  track: 1.2,
-  /** Coeficiente de agarre de los slicks. */
-  mu: 1.75,
-  /** Curva del neumático: pico de fuerza a ~6° de deriva y 0,88 al deslizar. */
-  tyreB: 22,
-  tyreC: 1.35,
-  /** Trasero: algo más de agarre y caída más suave tras el pico (kart estable). */
-  muRear: 1.06,
-  /** Sensibilidad del agarre a la carga vertical. */
-  loadSens: 0.3,
-  tyreCRear: 1.12,
-  /** Potencia útil en rueda (W) y fuerza máxima de tracción (N). */
+  h: 0.25,
+  /** Vías delantera y trasera (m). */
+  trackF: 1.1,
+  trackR: 1.36,
+  /** Reparto de la transferencia lateral al eje delantero (rigidez del chasis). */
+  rollFront: 0.55,
+  /** Jacking del avance de pivote: carga que pasa en diagonal por radián de giro (N/rad). */
+  jacking: 950,
+  /** Rigidez vertical del neumático por rueda (N/m) y rigidez a torsión del chasis vista desde
+   * una rueda que se despega (N/m): cuánto sube la rueda con la carga que "le falta". */
+  wheelK: 28000,
+  liftK: 6000,
+  /** Retardo de la transferencia de carga por la flexión del chasis (s). */
+  loadLag: 0.035,
+  /** Inercia del eje trasero con ruedas, corona, disco y motor reducido (kg·m²) y de cada rueda delantera. */
+  axleI: 0.2,
+  frontI: 0.012,
+  /** Motor: potencia útil (W) y fuerza máxima en rueda con el embrague patinando (N). */
   power: 15500,
   fMax: 1150,
-  /** Resistencias: aerodinámica (½·ρ·Cd·A), rodadura y freno motor (transmisión directa). */
+  /** Velocidad a la que engrana el embrague centrífugo (m/s). */
+  clutchV: 6,
+  /** Freno motor (transmisión directa): par en el eje (N·m) fijo y por rad/s. */
+  engineBrake: 8.5,
+  engineBrakeW: 0.045,
+  /** Frenos: par máximo en el eje trasero (disco único) y en cada rueda delantera (N·m). */
+  brakeRear: 115,
+  brakeFront: 75,
+  /** Resistencia aerodinámica ½·ρ·Cd·A (N·s²/m²). */
   dragK: 0.36,
-  crr: 0.018,
-  engineBrake: 60,
-  engineBrakeV: 2.2,
-  /** Freno: deceleración pedida con el pedal a fondo y reparto delante. */
-  brakeDecel: 11.5,
-  brakeFront: 0.6,
-  /** Ángulo máximo de dirección a baja velocidad (rad). */
-  steerMax: 0.42,
-  /** Arrastre del eje rígido en curva (fracción del peso trasero). */
-  scrub: 0.55,
-  /** Amortiguación de guiñada del chasis y el eje rígido (N·m·s/rad). */
-  yawDamp: 60,
+  /** Ángulo máximo de las ruedas delanteras (rad), ~23°. */
+  steerMax: 0.4,
   reverseMax: 7,
   radius: 0.95,
   /** Barrera de neumáticos: rebote y fricción en el contacto. */
   wallRestitution: 0.3,
   wallFriction: 0.45,
-  /** Saltito: duración, recarga y ganancia de tracción. */
-  hopTime: 0.3,
+  /** Saltito: duración del desplazamiento del piloto (s), recarga y cuánto se desplaza su peso (m). */
+  hopTime: 0.32,
   hopCool: 0.7,
-  hopGain: 0.28,
-  /** Valores derivados para la IA y la línea de carrera. */
-  aLat: 15.5,
+  hopShiftLat: 0.3,
+  hopShiftLong: 0.12,
+  /** Valores derivados para la IA y la línea de carrera (medidos con test:physics). */
+  aLat: 14.6,
   R0: 2.5,
 };
 
@@ -86,9 +97,9 @@ export function setKartClass(vmaxFactor: number, accelFactor: number): void {
 export type SurfaceKind = 'track' | 'kerb' | 'grass' | 'gravel' | 'sand' | 'asphalt';
 
 /**
- * Por superficie: agarre relativo, rodadura extra (fracción del peso) y frenado
- * proporcional a la velocidad (hierba que se hunde, grava que "traga" el kart).
- * La hierba apenas frena, lo que castiga es que no agarra; la grava sí para el kart.
+ * Por superficie (rueda a rueda): agarre relativo, rodadura extra (fracción de
+ * la carga de esa rueda) y frenado proporcional a la velocidad (N por kg y m/s,
+ * repartido entre las cuatro ruedas): hierba que se hunde, grava que traga.
  */
 const SURF: Record<SurfaceKind, { grip: number; crr: number; vK: number }> = {
   track: { grip: 1, crr: 0, vK: 0 },
@@ -99,41 +110,18 @@ const SURF: Record<SurfaceKind, { grip: number; crr: number; vK: number }> = {
   gravel: { grip: 0.45, crr: 0.35, vK: 0.15 },
 };
 
-/** Fuerza lateral normalizada del neumático para un ángulo de deriva (−1…1, pico ≈ 1). */
-export function tyreCurve(alpha: number, c = KART.tyreC): number {
-  return Math.sin(c * Math.atan(KART.tyreB * alpha));
-}
-
-/** Ángulo de deriva del pico de agarre (rad). */
-export const ALPHA_PEAK = Math.tan(Math.PI / (2 * KART.tyreC)) / KART.tyreB;
+/** Ángulo de deriva del pico de agarre trasero (rad), para efectos y sonido. */
+export const ALPHA_PEAK = TYRE_REAR.alphaPeak;
 
 /**
- * Ángulo de dirección máximo disponible a una velocidad (dirección progresiva):
- * el volante a fondo pide un poco más que la curva de máximo agarre, nunca un
- * disparate que haga barrer las cuatro ruedas (en un kart real a 80 km/h las
- * ruedas apenas giran 2–3°).
+ * Dirección (−1…1) para describir en régimen estacionario una curva de
+ * curvatura k (positiva = derecha): ángulo geométrico de la batalla sobre el
+ * ángulo máximo de las ruedas. La usan la IA y las ayudas (la física no limita
+ * la dirección con la velocidad).
  */
-export function steerLimit(v: number): number {
-  const u = Math.max(Math.abs(v), 1);
+export function steadySteer(k: number, _v: number): number {
   const L = KART.a + KART.b;
-  return Math.min(KART.steerMax, (L * KART.aLat * 1.25) / (u * u) + 0.012);
-}
-
-/**
- * Dirección (−1…1) necesaria para describir en régimen estacionario una curva de
- * curvatura k (positiva = derecha) a velocidad v. Con el reparto de pesos del kart
- * ambos ejes trabajan a la misma fracción de agarre, así que es casi neutro:
- * basta el ángulo geométrico (Ackermann) más un pequeño margen.
- */
-export function steadySteer(k: number, v: number): number {
-  const L = KART.a + KART.b;
-  return clamp((Math.atan(L * k) * 1.05) / steerLimit(v), -1.5, 1.5);
-}
-
-/** Velocidad angular máxima de giro (rad/s) a una velocidad dada. */
-export function maxYawRate(v: number): number {
-  const a = Math.abs(v);
-  return a / (KART.R0 + (a * a) / KART.aLat);
+  return clamp((Math.atan(L * k) * 1.08) / KART.steerMax, -1.5, 1.5);
 }
 
 /** Velocidad máxima a la que se puede trazar una curvatura k sin derrapar. */
@@ -146,13 +134,22 @@ export function cornerSpeed(k: number, margin = 0.92): number {
 
 export type KartEvent = 'hop' | 'slideStart' | 'kerb';
 
-const SUBSTEPS = 4;
+/** Subpasos por paso de 120 Hz (960 Hz de integración). */
+const SUBSTEPS = 8;
+const G = 9.81;
+/** Índices de rueda: delantera izq., delantera der., trasera izq., trasera der. */
+const FL = 0;
+const FR = 1;
+const RL = 2;
+const RR = 3;
+const tyreTmp: TyreOut = { fx: 0, fy: 0, sigma: 0, dFdk: 0 };
 
 /**
- * Física de un kart en 2.5D: el movimiento es en el plano XZ y la altura la marca
- * la pista. Integra un modelo de bicicleta (dos ejes) con neumáticos no lineales a
- * 4 subpasos por paso de 120 Hz. El derrape no es un botón: aparece solo cuando un
- * eje supera su agarre (entrar pasado, frenar girando, levantar o pisar a destiempo).
+ * Kart con física de vehículo de 4 ruedas sobre la superficie de la pista. Integra
+ * a 960 Hz el chasis (avance, deriva y guiñada), el giro del eje trasero macizo y
+ * de cada rueda delantera, y la relajación lateral de cada neumático. El derrape,
+ * el arrastre del eje en curva y la rueda trasera interior levantada no se
+ * programan: salen de las cargas y de los neumáticos.
  */
 export class Kart {
   x = 0;
@@ -163,6 +160,7 @@ export class Kart {
   vz = 0;
   /** Velocidad de guiñada (rad/s), positiva = girando a la derecha. */
   yawRate = 0;
+  /** Posición del volante (−1…1) tras la dinámica del brazo del piloto. */
   steer = 0;
   // Estado previo para interpolar el render.
   px = 0;
@@ -171,20 +169,49 @@ export class Kart {
   pyaw = 0;
 
   readonly proj: TrackProj = makeProj();
+  /** Superficie bajo el centro del kart (para sonido y efectos). */
   surface: SurfaceKind = 'track';
+  /** Superficie bajo cada rueda (FL, FR, RL, RR). */
+  readonly wheelSurface: SurfaceKind[] = ['track', 'track', 'track', 'track'];
   /** Velocidad longitudinal (m/s, con signo). */
   vF = 0;
   /** Velocidad lateral (m/s), positiva = hacia la derecha. */
   vL = 0;
 
+  // --- Estado de las ruedas ---
+  /** Velocidad angular del eje trasero y de cada rueda delantera (rad/s). */
+  axleW = 0;
+  readonly frontW = [0, 0];
+  /** Tangente de la deriva "relajada" de cada neumático. */
+  private readonly tanA = [0, 0, 0, 0];
+  /** Carga vertical de cada rueda (N) y carga sin acotar (negativa = rueda en el aire). */
+  readonly load = [0, 0, 0, 0];
+  readonly loadRaw = [0, 0, 0, 0];
+  /** Altura a la que queda levantada cada rueda (m) y deriva / patinaje / fuerza de cada una. */
+  readonly lift = [0, 0, 0, 0];
+  readonly wheelAlpha = [0, 0, 0, 0];
+  readonly wheelKappa = [0, 0, 0, 0];
+  readonly wheelFx = [0, 0, 0, 0];
+  readonly wheelSigma = [0, 0, 0, 0];
+  /** Ángulos reales de cada rueda delantera (rad, positivo = derecha). */
+  readonly wheelSteer = [0, 0];
+  /** Balanceo y cabeceo del chasis por las cargas (rad; balanceo + = lado izquierdo arriba, cabeceo + = morro abajo). */
+  chassisRoll = 0;
+  chassisPitch = 0;
+  /** Revoluciones del motor normalizadas (0 = 2.500 rpm, 1 = 16.000 rpm). */
+  rpm = 0;
+
   /** Deslizando (eje trasero más allá del pico de agarre): derrape natural. */
   drifting = false;
   /** Sentido del derrape: 1 = curva a derechas. */
   driftDir = 0;
-  /** Ángulo de deriva del eje trasero (rad) y del delantero, para sonido y efectos. */
+  /** Deriva media de cada eje (rad), para sonido y efectos. */
   slipRear = 0;
   slipFront = 0;
-  /** Fracción de tracción perdida por el arrastre del eje rígido (0…1). */
+  /**
+   * Lucha del eje macizo (0…1): diferencia de fuerza entre las dos ruedas
+   * traseras (la interior patina hacia delante y la exterior frena).
+   */
   bog = 0;
   /** Rebufo 0..1 (lo calcula el mundo). */
   slip = 0;
@@ -207,9 +234,10 @@ export class Kart {
   driftVisual = 0;
   /** Temporizador visual del saltito del piloto. */
   hop = 0;
-  /** Tiempo restante del efecto del saltito y de su recarga. */
-  hopActive = 0;
+  /** Tiempo desde el inicio del saltito (−1 = no hay) y recarga. */
+  private hopT = -1;
   hopCool = 0;
+  private hopSide = 0;
   rumble = 0;
   /** Ruedas sobre el piano: 0 (ninguna), 0.5 (un lado), 1 (las cuatro). */
   kerb = 0;
@@ -221,9 +249,10 @@ export class Kart {
   /** Para sonido/partículas. */
   events: KartEvent[] = [];
   private hopHeld = false;
-  /** Aceleración longitudinal filtrada (transferencia de carga y cabeceo visual). */
+  /** Aceleraciones longitudinal y lateral del chasis, filtradas por su flexión (m/s²). */
   ax = 0;
-  /** Ángulo real de las ruedas delanteras (rad, positivo = derecha). */
+  ay = 0;
+  /** Ángulo medio real de las ruedas delanteras (rad, positivo = derecha). */
   wheelAngle = 0;
 
   setPose(track: Track, s: number, lat: number): void {
@@ -236,9 +265,13 @@ export class Kart {
     this.vx = this.vz = 0;
     this.yawRate = 0;
     this.vF = this.vL = 0;
-    this.ax = 0;
+    this.ax = this.ay = 0;
+    this.axleW = 0;
+    this.frontW[0] = this.frontW[1] = 0;
+    this.tanA.fill(0);
     this.drifting = false;
-    this.hopActive = this.hopCool = 0;
+    this.hopT = -1;
+    this.hopCool = 0;
     this.steer = 0;
     track.projectGlobal(p.x, p.z, p.y, this.proj);
   }
@@ -261,29 +294,51 @@ export class Kart {
     this.pyaw = this.yaw;
   }
 
+  /** Superficie bajo cada rueda a partir de la proyección del kart sobre la pista. */
+  private wheelSurfaces(track: Track): void {
+    const p = this.proj;
+    const trx = -p.tz;
+    const trz = p.tx;
+    const fx = Math.sin(this.yaw);
+    const fz = Math.cos(this.yaw);
+    const kerbHere = track.kerb[p.idx] === 1;
+    for (let i = 0; i < 4; i++) {
+      const lf = i < 2 ? KART.a : -KART.b;
+      const half = (i < 2 ? KART.trackF : KART.trackR) / 2;
+      const lr = i % 2 === 0 ? -half : half; // izquierda negativa (eje "derecha")
+      const ox = fx * lf - fz * lr;
+      const oz = fz * lf + fx * lr;
+      const a = Math.abs(p.lat + ox * trx + oz * trz);
+      this.wheelSurface[i] = a <= p.hw + 0.1 ? 'track' : a <= p.hw + KERB_WIDTH && kerbHere ? 'kerb' : a <= p.hw + 0.4 ? 'track' : track.surface;
+    }
+  }
+
   step(dt: number, inp: KartInput, track: Track): void {
     this.events.length = 0;
     this.wallImpact = 0;
     this.wallScrape = 0;
     if (this.ghost > 0) this.ghost -= dt;
 
-    const surf = SURF[this.surface];
     const thr = clamp(inp.throttle, 0, 1);
     const brk = clamp(inp.brake, 0, 1);
 
-    // --- Dirección (cremallera rápida; vuelve sola al centro por el avance de pivote) ---
+    // --- Brazos del piloto: el volante no salta de golpe (dinámica de entrada, no del vehículo) ---
     const steerRate = Math.abs(inp.steer) > Math.abs(this.steer) ? 10 : 14;
     this.steer = damp(this.steer, clamp(inp.steer, -1, 1), steerRate, dt);
 
-    // --- Saltito ---
+    // --- Saltito: el piloto empuja contra el asiento y luego se descarga, desplazando su peso hacia fuera ---
     const hopPressed = inp.hop && !this.hopHeld;
     this.hopHeld = inp.hop;
     if (hopPressed && this.hopCool <= 0 && this.vF > 2) {
-      this.hopActive = KART.hopTime;
+      this.hopT = 0;
       this.hopCool = KART.hopCool;
       this.hop = 0.16;
+      // fuera de la curva: el lado opuesto al giro
+      this.hopSide = -sign(this.yawRate) || 0;
       this.events.push('hop');
     }
+
+    this.wheelSurfaces(track);
 
     // --- Pendiente ---
     const i0 = this.proj.idx;
@@ -292,128 +347,209 @@ export class Kart {
 
     const h = dt / SUBSTEPS;
     const m = KART.mass;
-    const g = 9.81;
     const L = KART.a + KART.b;
+    const tf = KART.trackF;
+    const tr = KART.trackR;
     const wasSliding = this.drifting;
     let slideAcc = 0;
     let bogAcc = 0;
+    // Ackermann: ángulo de cada rueda delantera para el ángulo "de bicicleta" δ
+    const delta = this.steer * KART.steerMax; // + = derecha
+    let dL = delta;
+    let dR = delta;
+    if (Math.abs(delta) > 1e-4) {
+      const R = L / Math.tan(Math.abs(delta));
+      const inner = Math.atan(L / Math.max(0.3, R - tf / 2));
+      const outer = Math.atan(L / (R + tf / 2));
+      if (delta > 0) {
+        dR = inner;
+        dL = outer;
+      } else {
+        dL = -inner;
+        dR = -outer;
+      }
+    }
+    this.wheelSteer[0] = dL;
+    this.wheelSteer[1] = dR;
+    this.wheelAngle = delta;
+    // en ejes internos (y a la izquierda) el ángulo positivo gira a la izquierda
+    const dF = [-dL, -dR];
+
     for (let sub = 0; sub < SUBSTEPS; sub++) {
-      // Velocidades en ejes del kart. Internamente: y hacia la IZQUIERDA y w antihorario.
       const fx = Math.sin(this.yaw);
       const fz = Math.cos(this.yaw);
+      // ejes del kart: u adelante, vy a la izquierda, w antihorario
       let u = this.vx * fx + this.vz * fz;
-      let vy = -(this.vx * -fz + this.vz * fx);
+      let vy = this.vx * fz - this.vz * fx;
       let w = -this.yawRate;
-      const au = Math.abs(u);
+      const spd = Math.hypot(u, vy);
 
-      // Ángulo de las ruedas: dirección progresiva con la velocidad. Al contravolantear
-      // un derrape hay recorrido extra para alinear las ruedas con la trayectoria.
-      let lim = steerLimit(u);
-      if (this.steer * this.yawRate < 0 && au > 3) lim += Math.min(0.4, Math.abs(Math.atan2(vy, au)) * 1.1);
-      const delta = -this.steer * lim;
+      // --- Cargas por rueda ---
+      const Fs = (m * G * KART.b) / L / 2;
+      const Rs = (m * G * KART.a) / L / 2;
+      const dLong = (m * this.ax * KART.h) / L / 2;
+      const latMoment = m * this.ay * KART.h; // ay > 0 hacia la izquierda
+      const dLatF = (KART.rollFront * latMoment) / tf;
+      const dLatR = ((1 - KART.rollFront) * latMoment) / tr;
+      // Jacking del avance de pivote: con las ruedas giradas pasa carga en diagonal
+      // (del par rueda trasera interior / delantera exterior al par opuesto)
+      const jack = KART.jacking * Math.abs(delta) * Math.min(1, spd / 3);
+      const turnL = delta < 0 ? 1 : -1; // girando a la izquierda: interior = izquierda
+      // Saltito: el piloto se levanta un instante y echa el cuerpo hacia fuera y hacia
+      // delante. El peso total no cambia: solo se reparte distinto (momentos de su peso),
+      // lo que descarga la rueda trasera interior y libera el eje macizo.
+      let hopLat = 0;
+      let hopLong = 0;
+      if (this.hopT >= 0) {
+        const md = KART.driverMass * G;
+        // perfil suave de subida y bajada del desplazamiento
+        const ph = Math.sin((Math.PI * this.hopT) / KART.hopTime);
+        hopLat = this.hopSide * md * KART.hopShiftLat * ph; // N·m (+ = hacia la derecha)
+        hopLong = md * KART.hopShiftLong * ph; // N·m (+ = hacia delante)
+      }
+      const raw = this.loadRaw;
+      const hL = hopLong / L / 2;
+      raw[FL] = Fs - dLong - dLatF + turnL * jack + hL - (hopLat / tf) * 0.3;
+      raw[FR] = Fs - dLong + dLatF - turnL * jack + hL + (hopLat / tf) * 0.3;
+      raw[RL] = Rs + dLong - dLatR - turnL * jack - hL - (hopLat / tr) * 0.7;
+      raw[RR] = Rs + dLong + dLatR + turnL * jack - hL + (hopLat / tr) * 0.7;
+      // Rueda en el aire: no puede tirar; su carga pasa a la otra rueda del eje
+      const ld = this.load;
+      for (const [aI, bI] of [
+        [FL, FR],
+        [RL, RR],
+      ]) {
+        let la = raw[aI];
+        let lb = raw[bI];
+        if (la < 0) {
+          lb += la;
+          la = 0;
+        }
+        if (lb < 0) {
+          la += lb;
+          lb = 0;
+        }
+        ld[aI] = Math.max(0, la);
+        ld[bI] = Math.max(0, lb);
+      }
 
-      // Cargas por eje con transferencia longitudinal
-      const dFz = (m * this.ax * KART.h) / L;
-      const FzF = Math.max(80, (m * g * KART.b) / L - dFz);
-      const FzR = Math.max(80, (m * g * KART.a) / L + dFz);
-      // Sensibilidad a la carga: un neumático más cargado agarra proporcionalmente menos
-      const FzF0 = (m * g * KART.b) / L;
-      const FzR0 = (m * g * KART.a) / L;
-      let muR = KART.mu * KART.muRear * surf.grip * clamp(1 - KART.loadSens * (FzR / FzR0 - 1), 0.7, 1.25);
-      const muF = KART.mu * surf.grip * clamp(1 - KART.loadSens * (FzF / FzF0 - 1), 0.7, 1.25);
-      // Al despegar del asiento la zaga se descarga un instante
-      if (this.hopActive > KART.hopTime - 0.12) muR *= 0.86;
-
-      // --- Fuerzas longitudinales ---
+      // --- Motor, embrague y frenos (pares en las ruedas) ---
+      const rR = TYRE_REAR.radius;
+      const axleV = this.axleW * rR;
       const vmaxEff = KART.vmax * (1 + 0.06 * this.slip);
-      let drive = 0;
+      let driveT = 0;
       if (thr > 0.02) {
-        if (u < -0.3) drive = m * KART.brakeDecel * 0.6 * thr; // frenar la marcha atrás
+        if (u < -0.3 && axleV < 0) driveT = KART.fMax * rR * thr; // frena la marcha atrás
         else {
-          drive = Math.min(KART.fMax, KART.power / Math.max(au, 1)) * thr;
-          // limitador de vueltas
-          drive *= clamp((vmaxEff - u) / 1.2, 0, 1);
-          // El saltito ayuda sobre todo cuando el eje rígido está "clavado" en curva
-          if (this.hopActive > 0 && thr > 0.5 && u < vmaxEff * 0.9) drive *= 1 + KART.hopGain * clamp(this.bog / 0.25, 0.2, 1);
+          driveT = Math.min(KART.fMax, KART.power / Math.max(Math.abs(axleV), 1)) * rR * thr;
+          driveT *= clamp((vmaxEff - axleV) / 1.2, 0, 1); // limitador
+        }
+      } else if (axleV > KART.clutchV) {
+        // freno motor de la transmisión directa (con el embrague engranado)
+        driveT = -(KART.engineBrake + KART.engineBrakeW * this.axleW);
+      }
+      let reverseT = 0;
+      if (!inp.hold && brk > 0.02 && thr < 0.1 && u < 0.4 && this.axleW <= 0.5 && u > -KART.reverseMax) reverseT = -45 * brk;
+      const brakeOn = brk > 0.02 && !(reverseT < 0);
+      const brakeTR = brakeOn ? KART.brakeRear * brk : 0;
+      const brakeTF = brakeOn ? KART.brakeFront * brk : 0;
+      // RPM del motor: con el embrague patinando el motor sube de vueltas con el gas
+      const clutchRpm = thr * 0.42;
+      this.rpm = Math.max(clutchRpm, (Math.abs(axleV) / KART.vmax) * 0.98);
+
+      // --- Neumáticos ---
+      let Fx = 0;
+      let Fy = 0;
+      let Mz = 0;
+      let rearFx = 0;
+      let rearFxDiff = 0;
+      let slipR = 0;
+      let slipF = 0;
+      let rearTorque = 0;
+      let rearK = 0;
+      for (let i = 0; i < 4; i++) {
+        const front = i < 2;
+        const tp: TyreParams = front ? TYRE_FRONT : TYRE_REAR;
+        const lx = front ? KART.a : -KART.b;
+        const ly = i % 2 === 0 ? (front ? tf : tr) / 2 : -(front ? tf : tr) / 2;
+        // velocidad del punto de contacto (ejes del kart)
+        const pvx = u - w * ly;
+        const pvy = vy + w * lx;
+        // a ejes de la rueda
+        const d = front ? dF[i] : 0;
+        const c = Math.cos(d);
+        const sn = Math.sin(d);
+        const wvx = pvx * c + pvy * sn;
+        const wvy = -pvx * sn + pvy * c;
+        const surf = SURF[this.wheelSurface[i]];
+        // deriva con relajación: la fuerza lateral se construye al rodar
+        const vden = Math.max(Math.abs(wvx), 1);
+        const tanSS = -wvy / vden;
+        this.tanA[i] += (vden / tp.relax) * (tanSS - this.tanA[i]) * h;
+        this.tanA[i] = clamp(this.tanA[i], -3, 3);
+        const ww = front ? this.frontW[i] : this.axleW;
+        const kappa = (ww * tp.radius - wvx) / vden;
+        tyreForce(tp, ld[i], kappa, this.tanA[i], surf.grip, tyreTmp);
+        let tfx = tyreTmp.fx;
+        const tfy = tyreTmp.fy;
+        // rodadura (también la extra de la superficie)
+        const rr = (tp.crr + surf.crr) * ld[i] + (surf.vK * m * Math.abs(wvx)) / 4;
+        tfx -= rr * Math.tanh(wvx * 4);
+        this.wheelAlpha[i] = Math.atan(this.tanA[i]);
+        this.wheelKappa[i] = kappa;
+        this.wheelFx[i] = tyreTmp.fx;
+        this.wheelSigma[i] = tyreTmp.sigma;
+        // a ejes del kart
+        const bfx = tfx * c - tfy * sn;
+        const bfy = tfx * sn + tfy * c;
+        Fx += bfx;
+        Fy += bfy;
+        Mz += lx * bfy - ly * bfx;
+        if (front) {
+          // rueda delantera libre: solo freno y fuerza del neumático (integración implícita)
+          const k = (tyreTmp.dFdk * tp.radius * tp.radius) / vden;
+          const tq = -tyreTmp.fx * tp.radius;
+          let wn = this.frontW[i] + (h * tq) / (KART.frontI + h * k);
+          wn = applyBrake(wn, brakeTF, KART.frontI, h);
+          this.frontW[i] = wn;
+          slipF += Math.abs(this.wheelAlpha[i]) * 0.5;
+        } else {
+          rearTorque += -tyreTmp.fx * tp.radius;
+          rearK += (tyreTmp.dFdk * tp.radius * tp.radius) / vden;
+          rearFx += tyreTmp.fx;
+          rearFxDiff += i === RL ? tyreTmp.fx : -tyreTmp.fx;
+          slipR += Math.abs(this.wheelAlpha[i]) * (ld[i] > 1 ? 1 : 0);
         }
       }
-      let brakeF = 0;
-      let brakeR = 0;
-      let reverse = 0;
-      if (brk > 0.02) {
-        if (u > 0.3) {
-          const want = m * KART.brakeDecel * brk;
-          brakeF = Math.min(want * KART.brakeFront, 0.97 * muF * FzF);
-          // El trasero no llega a bloquear del todo (el piloto modula): deja agarre lateral
-          brakeR = Math.min(want * (1 - KART.brakeFront), (0.7 - 0.35 * Math.abs(this.steer)) * muR * FzR);
-        } else if (thr < 0.1 && u > -KART.reverseMax) reverse = -420 * brk;
+      // --- Eje trasero macizo: una sola velocidad para las dos ruedas ---
+      {
+        const tq = driveT + reverseT + rearTorque;
+        let wn = this.axleW + (h * tq) / (KART.axleI + h * rearK);
+        wn = applyBrake(wn, brakeTR, KART.axleI, h);
+        this.axleW = wn;
       }
-      // Eje trasero: tracción/frenada limitada por el círculo de fricción
-      const capR = muR * FzR;
-      let FxR = clamp(drive + reverse - brakeR, -0.98 * capR, 0.98 * capR);
-      const FyRcap = Math.sqrt(Math.max(0, capR * capR - FxR * FxR));
-      const FyFcap = Math.sqrt(Math.max(0, (muF * FzF) ** 2 - brakeF * brakeF));
+      const rearGround = (ld[RL] > 1 ? 1 : 0) + (ld[RR] > 1 ? 1 : 0);
+      slipR = rearGround ? slipR / rearGround : 0;
+      // Lucha del eje: con las dos ruedas apoyadas, una empuja y la otra frena
+      const capR = TYRE_REAR.mu * (ld[RL] + ld[RR]) + 1;
+      bogAcc += ld[RL] > 1 && ld[RR] > 1 ? clamp(Math.abs(rearFxDiff) / capR - Math.abs(rearFx) / capR, 0, 1) : 0;
 
-      // --- Fuerzas laterales (ángulos de deriva) ---
-      const uu = Math.max(au, 0.5);
-      const alphaF = delta - Math.atan2(vy + KART.a * w, uu);
-      const alphaR = -Math.atan2(vy - KART.b * w, uu);
-      // Por debajo de ~1 m/s el neumático no puede generar fuerza lateral apreciable
-      // (sin esto, un kart parado con las ruedas giradas "se empujaría" solo)
-      const fade = clamp(Math.hypot(u, vy) / 1.2, 0, 1);
-      const FyF = FyFcap * tyreCurve(alphaF) * fade;
-      const FyR = FyRcap * tyreCurve(alphaR, KART.tyreCRear) * fade;
-      this.wheelAngle = -delta;
-      this.slipFront = alphaF;
-      this.slipRear = alphaR;
+      // --- Resistencias del chasis ---
+      const aero = KART.dragK * (1 - 0.4 * this.slip) * u * Math.abs(u);
+      const gravity = -m * G * slope * (fx * this.proj.tx + fz * this.proj.tz);
+      Fx += -aero + gravity;
 
-      // Arrastre del eje rígido: la rueda interior tiene que patinar en curva
-      const scrubSlip = (Math.abs(w) * KART.track) / Math.max(au, 3);
-      let bog = clamp(scrubSlip * 5, 0, 0.6);
-      if (this.hopActive > 0) bog *= 0.2;
-      const scrubF = KART.scrub * FzR * surf.grip * bog;
-      bogAcc += bog;
-
-      // Resistencias (siempre contra el avance)
-      const rollF = (KART.crr + surf.crr) * m * g + surf.vK * m * au;
-      const aeroF = KART.dragK * (1 - 0.4 * this.slip) * u * u;
-      const engF = thr < 0.05 && u > 0 ? KART.engineBrake + KART.engineBrakeV * u : 0;
-      const resist = (rollF + aeroF + engF + scrubF) * sign(u);
-      const gravity = -m * g * slope * (fx * this.proj.tx + fz * this.proj.tz);
-      // freno de la rueda delantera en la dirección de la rueda
-      const FxF = -brakeF * sign(u);
-
-      const Fx = FxR + FxF * Math.cos(delta) - FyF * Math.sin(delta) - resist + gravity;
-      const Fy = FyR + FyF * Math.cos(delta) + FxF * Math.sin(delta);
-      // El eje rígido arrastra la rueda interior: par que se opone al giro
-      const axleM = -sign(w) * scrubF * KART.track * 0.5 - w * KART.yawDamp;
-      const Mz = KART.a * (FyF * Math.cos(delta) + FxF * Math.sin(delta)) - KART.b * FyR + axleM;
-
-      const uPrev = u;
-      const axForce = Fx / m;
-      u += (Fx / m + vy * w) * h;
-      vy += (Fy / m - u * w) * h;
+      // --- Integración del chasis ---
+      const axF = Fx / m;
+      const ayF = Fy / m;
+      u += (axF + vy * w) * h;
+      vy += (ayF - u * w) * h;
       w += (Mz / KART.Iz) * h;
-      // El rozamiento no invierte el sentido de la marcha
-      if (thr <= 0.02 && reverse === 0 && uPrev !== 0 && sign(u) !== sign(uPrev)) u = 0;
-      if (brk > 0.02 && uPrev > 0 && u < 0) u = 0;
+      // aceleraciones que cargan las ruedas, con el retardo de la flexión del chasis
+      const kLag = Math.min(1, h / KART.loadLag);
+      this.ax += (axF - this.ax) * kLag;
+      this.ay += (ayF - this.ay) * kLag;
 
-      // A baja velocidad, mezcla con el modelo cinemático (estable al arrancar y maniobrar)
-      const kb = clamp((Math.hypot(u, vy) - 1.5) / 3.5, 0, 1);
-      if (kb < 1) {
-        const wk = (u * Math.tan(delta)) / L;
-        const vyk = KART.b * wk;
-        w = wk + (w - wk) * kb;
-        vy = vyk + (vy - vyk) * kb;
-      }
-
-      // Rozamiento estático: parado y sin gas, el kart no se mueve (ni gira sobre sí mismo)
-      if (thr <= 0.02 && reverse === 0 && Math.hypot(u, vy) < 0.25 && Math.abs(gravity) < KART.crr * m * g * 3) {
-        u = 0;
-        vy = 0;
-        w = 0;
-      }
-      this.ax = this.ax + (axForce - this.ax) * Math.min(1, h * 25);
       this.yaw = wrapAngle(this.yaw + w * h);
       const nfx = Math.sin(this.yaw);
       const nfz = Math.cos(this.yaw);
@@ -425,7 +561,13 @@ export class Kart {
       this.z += this.vz * h;
       this.vF = u;
       this.vL = -vy;
-      if (Math.abs(alphaR) > ALPHA_PEAK * 1.3 && au > 6) slideAcc++;
+      this.slipRear = slipR;
+      this.slipFront = slipF;
+      if (slipR > TYRE_REAR.alphaPeak * 1.3 && spd > 6) slideAcc++;
+      if (this.hopT >= 0) {
+        this.hopT += h;
+        if (this.hopT > KART.hopTime) this.hopT = -1;
+      }
     }
     this.bog = bogAcc / SUBSTEPS;
     this.drifting = slideAcc >= SUBSTEPS / 2;
@@ -433,8 +575,14 @@ export class Kart {
       this.driftDir = sign(this.yawRate) || this.driftDir;
       if (!wasSliding) this.events.push('slideStart');
     }
-
-    if (this.hopActive > 0) this.hopActive -= dt;
+    // Rueda levantada, balanceo y cabeceo a partir de las cargas reales
+    const k = KART.wheelK;
+    for (let i = 0; i < 4; i++) this.lift[i] = Math.max(0, -this.loadRaw[i]) / KART.liftK;
+    const def = (i: number) => this.load[i] / k - this.lift[i];
+    const left = (def(FL) + def(RL)) / 2;
+    const right = (def(FR) + def(RR)) / 2;
+    this.chassisRoll = Math.atan2(right - left, (tf + tr) / 2);
+    this.chassisPitch = Math.atan2((def(FL) + def(FR)) / 2 - (def(RL) + def(RR)) / 2, L);
     if (this.hopCool > 0) this.hopCool -= dt;
 
     this.collideTrack(track, dt);
@@ -653,4 +801,15 @@ export function collideKarts(karts: Kart[]): void {
       b.setContact(pax - b.x, paz - b.z, -nx, -nz);
     }
   }
+}
+
+/**
+ * Freno de disco sobre una rueda: par que se opone al giro; si basta para pararla
+ * en este paso, la rueda queda bloqueada (rozamiento estático del disco).
+ */
+function applyBrake(w: number, torque: number, I: number, h: number): number {
+  if (torque <= 0) return w;
+  const dw = (torque * h) / I;
+  if (Math.abs(w) <= dw) return 0;
+  return w - Math.sign(w) * dw;
 }

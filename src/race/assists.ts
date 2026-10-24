@@ -5,7 +5,8 @@ import { emptyInput, type Kart, type KartInput } from '../physics/Kart';
 import type { Track } from '../track/Track';
 
 /**
- * Ayudas a la conducción del jugador (no afectan a la IA rival).
+ * Ayudas a la conducción del jugador (no afectan a la IA rival ni a la física: son
+ * una capa entre el mando y el kart, como el control de tracción de un coche).
  *
  *  - Media: red de seguridad. Si vas a salirte de la pista corrige la dirección y,
  *    si llegas demasiado rápido a una curva, frena por ti.
@@ -40,6 +41,16 @@ export class DriverAssist {
     if (v < 3) return;
     const strong = level === 'maxima';
     const user = Math.abs(pi.steer);
+
+    // Control de estabilidad: si la zaga se suelta, el copiloto ayuda a contravolantear
+    // y el control de tracción corta gas (como en un coche; la física no se toca).
+    const rearSlide = clamp((Math.abs(k.slipRear) - 0.12) / 0.15, 0, 1);
+    if (rearSlide > 0) {
+      const mix = (strong ? 0.85 : 0.6) * rearSlide;
+      pi.steer = clamp(pi.steer * (1 - mix) + sc.steer * mix, -1, 1);
+      pi.throttle *= 1 - rearSlide * (strong ? 0.8 : 0.6);
+      if (pi.brake > 0.2) pi.brake *= 1 - rearSlide * 0.7;
+    }
 
     if (!k.drifting) {
       // Máxima: el copiloto conduce si no tocas nada; si giras, mezcla.

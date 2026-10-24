@@ -31,7 +31,7 @@ export const costaBlanca: TrackDef = {
   surface: 'sand',
   startAt: 0.1153,
   laps: 4,
-  record: { time: 47.1, holder: 'L. Ferrer' },
+  record: { time: 48.6, holder: 'L. Ferrer' },
   length: 1155,
   difficulty: 2,
   decor: [

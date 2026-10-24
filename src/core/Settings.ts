@@ -58,6 +58,8 @@ export interface Settings {
   keys: Record<Action, string[]>;
   touch: 'auto' | 'on' | 'off';
   autoAccel: boolean;
+  /** Filtro de entrada: el volante a tope se adapta a la velocidad (para teclado y táctil). */
+  steerFilter: boolean;
   /** Dirección táctil: barra deslizante analógica, flechas o inclinando el móvil. */
   touchSteer: 'pad' | 'botones' | 'inclinar';
   /** Cilindrada: velocidad punta del kart (y de los rivales). */
@@ -99,6 +101,7 @@ export function defaultSettings(): Settings {
     keys: structuredClone(DEFAULT_KEYS),
     touch: 'auto',
     autoAccel: false,
+    steerFilter: true,
     touchSteer: 'pad',
     speedClass: mobile ? '100' : '150',
     assist: mobile ? 'media' : 'ninguna',

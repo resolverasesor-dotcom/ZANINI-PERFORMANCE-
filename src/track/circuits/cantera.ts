@@ -25,7 +25,7 @@ export const cantera: TrackDef = {
   surface: 'gravel',
   startAt: 0.1478,
   laps: 4,
-  record: { time: 46.5, holder: 'S. Lindqvist' },
+  record: { time: 47.3, holder: 'S. Lindqvist' },
   length: 1373,
   difficulty: 3,
   decor: [

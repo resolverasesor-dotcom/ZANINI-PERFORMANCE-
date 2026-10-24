@@ -32,7 +32,7 @@ export const granPremio: TrackDef = {
   surface: 'gravel',
   startAt: 0.0865,
   laps: 3,
-  record: { time: 59.8, holder: 'A. Zanini' },
+  record: { time: 62.4, holder: 'A. Zanini' },
   length: 1381,
   difficulty: 5,
   decor: [

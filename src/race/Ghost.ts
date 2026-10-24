@@ -50,9 +50,9 @@ export function ghostPose(g: GhostData, t: number, out: { x: number; y: number; 
   return true;
 }
 
-// Con la física de kart real (v2) los tiempos no son comparables con los de la
-// física arcade anterior: récords y fantasmas se guardan con claves nuevas.
-const V = '2:';
+// Cada cambio de física hace que los tiempos dejen de ser comparables: récords y
+// fantasmas se guardan con claves por versión (v3 = vehículo de 4 ruedas).
+const V = '3:';
 
 export function loadGhost(trackId: string): GhostData | null {
   return load<GhostData | null>('ghost' + V + trackId, null);
@@ -78,5 +78,6 @@ export function saveRecord(trackId: string, r: TrackRecord): void {
 
 /** Mejor vuelta con la física anterior (solo para no perder desbloqueables ya ganados). */
 export function loadLegacyBest(trackId: string): number | null {
-  return load<TrackRecord>('record:' + trackId, { best: null, sectors: [] }).best;
+  const a = load<TrackRecord>('record2:' + trackId, { best: null, sectors: [] }).best;
+  return a ?? load<TrackRecord>('record:' + trackId, { best: null, sectors: [] }).best;
 }
