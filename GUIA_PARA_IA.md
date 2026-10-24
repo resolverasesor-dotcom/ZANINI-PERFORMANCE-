@@ -43,7 +43,7 @@ Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart), `?sp
 
 - Rumbo: adelante = `(sin yaw, cos yaw)`; derecha = `(-cos yaw, sin yaw)`. `yawRate` y `steer` positivos = derecha.
 - Pista: `lat` positivo = derecha; los muros están en `hw + runL/runR`.
-- La física corre a paso fijo de 1/120 s (4 subpasos dentro). No la ates a los FPS.
+- La física corre a paso fijo de 1/120 s (8 subpasos dentro, 960 Hz). No la ates a los FPS.
 - La simulación (`RaceSim`) no depende del render: así funcionan las pruebas sin navegador.
 - Todo el texto del juego está en español.
 
