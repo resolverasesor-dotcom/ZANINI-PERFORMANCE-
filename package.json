@@ -13,7 +13,8 @@
     "test:ai": "tsx scripts/sim-races.ts normal",
     "test:assists": "tsx scripts/sim-assists.ts 0.84",
     "test:laps": "tsx scripts/lap-times.ts",
-    "test:physics": "tsx scripts/sim-dynamics.ts"
+    "test:physics": "tsx scripts/sim-dynamics.ts",
+    "test:chassis": "tsx scripts/chassis.ts"
   },
   "devDependencies": {
     "@types/three": "0.170.0",

@@ -1,3 +1,4 @@
+import { getChassis, type ChassisId, type ChassisSpec } from '../physics/chassis';
 import { AIDriver, type AIWorld } from '../ai/AIDriver';
 import { paceFactor, type Difficulty, type DriverDef } from '../ai/Drivers';
 import { clamp, damp, rng } from '../core/math';
@@ -18,6 +19,8 @@ export interface Entrant {
   driver: DriverDef | null;
   /** Decoración del kart (solo visual). */
   look?: KartLook;
+  /** Modelo de chasis (cambia la física del kart). */
+  chassis?: ChassisId;
 }
 
 export interface SimConfig {
@@ -99,6 +102,7 @@ export class Competitor {
 
   constructor(e: Entrant) {
     this.e = e;
+    this.kart.spec = getChassis(e.chassis);
   }
 
   get id(): string {
@@ -603,8 +607,9 @@ export interface RaceResultRow {
 }
 
 /** Calcula el tiempo de vuelta de referencia de la IA (simulación sin render). */
-export function referenceLap(track: Track, speedFactor: number): number {
+export function referenceLap(track: Track, speedFactor: number, spec?: ChassisSpec): number {
   const k = new Kart();
+  if (spec) k.spec = spec;
   k.setPose(track, -20, track.sample(track.lineOffset, -20));
   const ai = new AIDriver(k, null, 'pro', 1);
   ai.perfect = true;

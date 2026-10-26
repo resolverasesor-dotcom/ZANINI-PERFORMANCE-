@@ -1,6 +1,7 @@
 import { clamp, damp, sign, wrapAngle } from '../core/math';
 import { KERB_WIDTH, makeProj, type Track, type TrackProj } from '../track/Track';
 import { TYRE_FRONT, TYRE_REAR, tyreForce, type TyreOut, type TyreParams } from './tyre';
+import { STANDARD_CHASSIS, type ChassisSpec } from './chassis';
 
 export interface KartInput {
   throttle: number;
@@ -254,6 +255,12 @@ export class Kart {
   ay = 0;
   /** Ángulo medio real de las ruedas delanteras (rad, positivo = derecha). */
   wheelAngle = 0;
+  /** Modelo de chasis (masa, inercia, motor, compuesto, frenos). */
+  spec: ChassisSpec = STANDARD_CHASSIS;
+  /** Velocidad punta de este kart (limitador), m/s. */
+  get vmax(): number {
+    return KART.vmax * this.spec.vmax;
+  }
 
   setPose(track: Track, s: number, lat: number): void {
     const p = { x: 0, y: 0, z: 0 };
@@ -346,7 +353,10 @@ export class Kart {
     const slope = (track.py[i1] - track.py[i0]) / track.ds;
 
     const h = dt / SUBSTEPS;
-    const m = KART.mass;
+    const sp = this.spec;
+    const m = KART.mass * sp.mass;
+    const Iz = KART.Iz * sp.Iz;
+    const rollF = KART.rollFront + sp.rollFront;
     const L = KART.a + KART.b;
     const tf = KART.trackF;
     const tr = KART.trackR;
@@ -389,8 +399,8 @@ export class Kart {
       const Rs = (m * G * KART.a) / L / 2;
       const dLong = (m * this.ax * KART.h) / L / 2;
       const latMoment = m * this.ay * KART.h; // ay > 0 hacia la izquierda
-      const dLatF = (KART.rollFront * latMoment) / tf;
-      const dLatR = ((1 - KART.rollFront) * latMoment) / tr;
+      const dLatF = (rollF * latMoment) / tf;
+      const dLatR = ((1 - rollF) * latMoment) / tr;
       // Jacking del avance de pivote: con las ruedas giradas pasa carga en diagonal
       // (del par rueda trasera interior / delantera exterior al par opuesto)
       const jack = KART.jacking * Math.abs(delta) * Math.min(1, spd / 3);
@@ -436,12 +446,13 @@ export class Kart {
       // --- Motor, embrague y frenos (pares en las ruedas) ---
       const rR = TYRE_REAR.radius;
       const axleV = this.axleW * rR;
-      const vmaxEff = KART.vmax * (1 + 0.06 * this.slip);
+      const vmaxEff = KART.vmax * sp.vmax * (1 + 0.06 * this.slip);
+      const fMax = KART.fMax * sp.fMax;
       let driveT = 0;
       if (thr > 0.02) {
-        if (u < -0.3 && axleV < 0) driveT = KART.fMax * rR * thr; // frena la marcha atrás
+        if (u < -0.3 && axleV < 0) driveT = fMax * rR * thr; // frena la marcha atrás
         else {
-          driveT = Math.min(KART.fMax, KART.power / Math.max(Math.abs(axleV), 1)) * rR * thr;
+          driveT = Math.min(fMax, (KART.power * sp.power) / Math.max(Math.abs(axleV), 1)) * rR * thr;
           driveT *= clamp((vmaxEff - axleV) / 1.2, 0, 1); // limitador
         }
       } else if (axleV > KART.clutchV) {
@@ -451,11 +462,11 @@ export class Kart {
       let reverseT = 0;
       if (!inp.hold && brk > 0.02 && thr < 0.1 && u < 0.4 && this.axleW <= 0.5 && u > -KART.reverseMax) reverseT = -45 * brk;
       const brakeOn = brk > 0.02 && !(reverseT < 0);
-      const brakeTR = brakeOn ? KART.brakeRear * brk : 0;
-      const brakeTF = brakeOn ? KART.brakeFront * brk : 0;
+      const brakeTR = brakeOn ? KART.brakeRear * sp.brake * brk : 0;
+      const brakeTF = brakeOn ? KART.brakeFront * sp.brake * brk : 0;
       // RPM del motor: con el embrague patinando el motor sube de vueltas con el gas
       const clutchRpm = thr * 0.42;
-      this.rpm = Math.max(clutchRpm, (Math.abs(axleV) / KART.vmax) * 0.98);
+      this.rpm = Math.max(clutchRpm, (Math.abs(axleV) / (KART.vmax * sp.vmax)) * 0.98);
 
       // --- Neumáticos ---
       let Fx = 0;
@@ -489,7 +500,7 @@ export class Kart {
         this.tanA[i] = clamp(this.tanA[i], -3, 3);
         const ww = front ? this.frontW[i] : this.axleW;
         const kappa = (ww * tp.radius - wvx) / vden;
-        tyreForce(tp, ld[i], kappa, this.tanA[i], surf.grip, tyreTmp);
+        tyreForce(tp, ld[i], kappa, this.tanA[i], surf.grip * sp.grip, tyreTmp);
         let tfx = tyreTmp.fx;
         const tfy = tyreTmp.fy;
         // rodadura (también la extra de la superficie)
@@ -544,7 +555,7 @@ export class Kart {
       const ayF = Fy / m;
       u += (axF + vy * w) * h;
       vy += (ayF - u * w) * h;
-      w += (Mz / KART.Iz) * h;
+      w += (Mz / Iz) * h;
       // aceleraciones que cargan las ruedas, con el retardo de la flexión del chasis
       const kLag = Math.min(1, h / KART.loadLag);
       this.ax += (axF - this.ax) * kLag;
@@ -693,8 +704,10 @@ const BODY_C = [0.3, -0.3];
 let lastSlide = 0;
 
 function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: number, rbz: number, nx: number, nz: number, e: number, mu: number): number {
-  const m = KART.mass;
-  const I = KART.Iz;
+  const ma = KART.mass * a.spec.mass;
+  const Ia = KART.Iz * a.spec.Iz;
+  const mb = b ? KART.mass * b.spec.mass : 1;
+  const Ib = b ? KART.Iz * b.spec.Iz : 1;
   // velocidad angular antihoraria (la guiñada del kart es positiva a la derecha)
   const wa = -a.yawRate;
   const wb = b ? -b.yawRate : 0;
@@ -709,8 +722,8 @@ function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: nu
   lastSlide = Math.hypot(rvx - vn * nx, rvz - vn * nz);
   if (vn <= 0) return 0;
   const cross = (rx: number, rz: number, jx: number, jz: number) => jx * rz - jz * rx;
-  const ka = 1 / m + cross(rax, raz, nx, nz) ** 2 / I;
-  const kb = b ? 1 / m + cross(rbx, rbz, nx, nz) ** 2 / I : 0;
+  const ka = 1 / ma + cross(rax, raz, nx, nz) ** 2 / Ia;
+  const kb = b ? 1 / mb + cross(rbx, rbz, nx, nz) ** 2 / Ib : 0;
   const j = ((1 + e) * vn) / (ka + kb);
   let jx = -j * nx;
   let jz = -j * nz;
@@ -721,19 +734,19 @@ function applyImpulse(a: Kart, b: Kart | null, rax: number, raz: number, rbx: nu
   if (vt > 1e-4) {
     const ux = tx / vt;
     const uz = tz / vt;
-    const kta = 1 / m + cross(rax, raz, ux, uz) ** 2 / I;
-    const ktb = b ? 1 / m + cross(rbx, rbz, ux, uz) ** 2 / I : 0;
+    const kta = 1 / ma + cross(rax, raz, ux, uz) ** 2 / Ia;
+    const ktb = b ? 1 / mb + cross(rbx, rbz, ux, uz) ** 2 / Ib : 0;
     const jt = Math.min(mu * j, vt / (kta + ktb));
     jx -= jt * ux;
     jz -= jt * uz;
   }
-  a.vx += jx / m;
-  a.vz += jz / m;
-  a.yawRate -= cross(rax, raz, jx, jz) / I;
+  a.vx += jx / ma;
+  a.vz += jz / ma;
+  a.yawRate -= cross(rax, raz, jx, jz) / Ia;
   if (b) {
-    b.vx -= jx / m;
-    b.vz -= jz / m;
-    b.yawRate += cross(rbx, rbz, jx, jz) / I;
+    b.vx -= jx / mb;
+    b.vz -= jz / mb;
+    b.yawRate += cross(rbx, rbz, jx, jz) / Ib;
   }
   return vn;
 }

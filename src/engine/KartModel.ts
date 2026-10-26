@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { blobTex, numberTex } from './textures';
 import { stickerTex } from './ads';
+import type { BodyStyle } from '../physics/chassis';
 import { accentFor, checkerDecalTex, flameDecalTex, helmetTex, namePlateTex, pennantTex, type HelmetStyle, type LiveryStyle } from './livery';
 
 // Kart low-poly construido con primitivas fusionadas en una sola malla con colores
@@ -33,25 +34,84 @@ function darker(hex: string, k: number): THREE.Color {
   return new THREE.Color(hex).multiplyScalar(k);
 }
 
-export function buildKartBody(color: string, suit: string, livery: LiveryStyle, accent: string): THREE.BufferGeometry {
+export function buildKartBody(color: string, suit: string, livery: LiveryStyle, accent: string, bodyStyle: BodyStyle = 'std'): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
   const carbon = '#16171b';
   const box = (w: number, h: number, l: number) => new THREE.BoxGeometry(w, h, l);
   // Chasis
   parts.push(colored(box(0.95, 0.07, 1.7), carbon, M(0, 0.13, 0)));
-  // Morro y spoiler delantero
-  parts.push(colored(box(0.92, 0.2, 0.36), color, M(0, 0.24, 0.84, -0.25)));
-  parts.push(colored(box(1.12, 0.08, 0.16), livery === 'ale' ? accent : carbon, M(0, 0.15, 1.02)));
-  // Pontones laterales
-  for (const s of [-1, 1]) {
-    parts.push(colored(box(0.26, 0.2, 0.82), color, M(s * 0.56, 0.22, 0.02)));
-    parts.push(colored(box(0.2, 0.06, 0.82), darker(color, 0.7), M(s * 0.56, 0.34, 0.02)));
+  const chrome = '#d9dde4';
+  if (bodyStyle === 'retro') {
+    // La Tostadora: chasis de tubos a la vista, morro de chapa redondo y faro
+    for (const s of [-1, 1]) {
+      parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 1.8, 6), chrome, M(s * 0.5, 0.2, 0, Math.PI / 2)));
+      parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6), chrome, M(s * 0.42, 0.3, 0.5, Math.PI / 2 - 0.4, 0, s * 0.3)));
+    }
+    parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 1.0, 6), chrome, M(0, 0.2, 0.86, 0, 0, Math.PI / 2)));
+    parts.push(colored(new THREE.CylinderGeometry(0.26, 0.3, 0.32, 10), color, M(0, 0.26, 0.86, Math.PI / 2 - 0.2)));
+    parts.push(colored(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 10), '#fff6c8', M(0, 0.3, 1.03, Math.PI / 2)));
+    parts.push(colored(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 10), chrome, M(0, 0.3, 1.01, Math.PI / 2)));
+    for (const s of [-1, 1]) parts.push(colored(box(0.2, 0.14, 0.5), color, M(s * 0.58, 0.24, 0.0)));
+    parts.push(colored(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6), chrome, M(0, 0.24, -0.98, 0, 0, Math.PI / 2)));
+    // Motor "tostadora" con dos tostadas asomando
+    parts.push(colored(box(0.34, 0.3, 0.36), chrome, M(0.34, 0.38, -0.58)));
+    for (const dz of [-0.07, 0.07]) {
+      parts.push(colored(box(0.22, 0.02, 0.05), '#222', M(0.34, 0.535, -0.58 + dz)));
+      parts.push(colored(box(0.18, 0.12, 0.03), '#d8a24a', M(0.34, 0.58, -0.58 + dz)));
+      parts.push(colored(box(0.19, 0.03, 0.035), '#8a5a1e', M(0.34, 0.645, -0.58 + dz)));
+    }
+    parts.push(colored(new THREE.CylinderGeometry(0.05, 0.07, 0.42, 6), chrome, M(0.34, 0.32, -0.88, Math.PI / 2)));
+  } else if (bodyStyle === 'aero') {
+    // Saeta: morro afilado y largo, pontones estrechos que se afinan, aleta tras el asiento
+    parts.push(colored(box(0.6, 0.14, 0.5), color, M(0, 0.22, 0.86, -0.22)));
+    parts.push(colored(new THREE.ConeGeometry(0.2, 0.36, 4), color, M(0, 0.22, 1.18, Math.PI / 2, Math.PI / 4)));
+    parts.push(colored(box(1.18, 0.04, 0.2), accent, M(0, 0.13, 1.04)));
+    for (const s of [-1, 1]) {
+      parts.push(colored(box(0.18, 0.16, 0.9), color, M(s * 0.56, 0.2, 0.0, 0, s * 0.06)));
+      parts.push(colored(box(0.14, 0.04, 0.9), accent, M(s * 0.56, 0.29, 0.0, 0, s * 0.06)));
+    }
+    parts.push(colored(box(0.04, 0.3, 0.36), color, M(0, 0.62, -0.62, 0.3)));
+    parts.push(colored(box(1.24, 0.1, 0.14), carbon, M(0, 0.22, -0.98)));
+    parts.push(colored(box(0.28, 0.26, 0.3), '#7a7f88', M(0.34, 0.34, -0.58)));
+    parts.push(colored(new THREE.CylinderGeometry(0.05, 0.05, 0.42, 6), '#b9bec7', M(0.34, 0.32, -0.86, Math.PI / 2)));
+  } else if (bodyStyle === 'tanque') {
+    // Toro: carrocería ancha y robusta, cuernos en el morro y doble escape ("V12")
+    parts.push(colored(box(1.02, 0.26, 0.4), color, M(0, 0.26, 0.84, -0.22)));
+    parts.push(colored(box(1.24, 0.12, 0.2), carbon, M(0, 0.16, 1.04)));
+    for (const s of [-1, 1]) {
+      parts.push(colored(new THREE.ConeGeometry(0.045, 0.26, 6), '#f1ead8', M(s * 0.38, 0.42, 0.98, -0.5, 0, -s * 0.9)));
+      parts.push(colored(box(0.34, 0.26, 0.86), color, M(s * 0.58, 0.24, 0.02)));
+      parts.push(colored(box(0.28, 0.06, 0.86), darker(color, 0.65), M(s * 0.58, 0.39, 0.02)));
+    }
+    parts.push(colored(box(1.42, 0.2, 0.2), carbon, M(0, 0.26, -0.99)));
+    parts.push(colored(box(0.4, 0.36, 0.4), '#5d6168', M(0.32, 0.4, -0.58)));
+    for (const dx of [0.24, 0.42]) parts.push(colored(new THREE.CylinderGeometry(0.06, 0.07, 0.46, 6), '#b9bec7', M(dx, 0.36, -0.88, Math.PI / 2)));
+  } else {
+    // Morro y spoiler delantero
+    parts.push(colored(box(0.92, 0.2, 0.36), color, M(0, 0.24, 0.84, -0.25)));
+    parts.push(colored(box(1.12, 0.08, 0.16), livery === 'ale' || bodyStyle === 'ale' ? accent : carbon, M(0, 0.15, 1.02)));
+    // Pontones laterales
+    for (const s of [-1, 1]) {
+      parts.push(colored(box(0.26, 0.2, 0.82), color, M(s * 0.56, 0.22, 0.02)));
+      parts.push(colored(box(0.2, 0.06, 0.82), darker(color, 0.7), M(s * 0.56, 0.34, 0.02)));
+    }
+    // Parachoques trasero
+    parts.push(colored(box(1.3, 0.14, 0.16), carbon, M(0, 0.24, -0.98)));
+    // Motor y escape
+    parts.push(colored(box(0.3, 0.3, 0.34), '#7a7f88', M(0.34, 0.36, -0.58)));
+    parts.push(colored(new THREE.CylinderGeometry(0.06, 0.06, 0.4, 6), '#b9bec7', M(0.34, 0.34, -0.85, Math.PI / 2)));
   }
-  // Parachoques trasero
-  parts.push(colored(box(1.3, 0.14, 0.16), carbon, M(0, 0.24, -0.98)));
-  // Motor y escape
-  parts.push(colored(box(0.3, 0.3, 0.34), '#7a7f88', M(0.34, 0.36, -0.58)));
-  parts.push(colored(new THREE.CylinderGeometry(0.06, 0.06, 0.4, 6), '#b9bec7', M(0.34, 0.34, -0.85, Math.PI / 2)));
+  if (bodyStyle === 'ale') {
+    // Bólido de Ale: corazón en el morro, detalles dorados y alerón
+    const heart = '#ff3b6b';
+    parts.push(colored(box(0.1, 0.1, 0.03), heart, M(-0.04, 0.37, 0.9, -0.25, 0, Math.PI / 4)));
+    parts.push(colored(box(0.1, 0.1, 0.03), heart, M(0.04, 0.37, 0.9, -0.25, 0, -Math.PI / 4)));
+    for (const s of [-1, 1]) parts.push(colored(box(0.04, 0.03, 0.82), '#e8b923', M(s * 0.69, 0.3, 0.02)));
+    if (livery !== 'ale') {
+      for (const x of [-0.42, 0.42]) parts.push(colored(box(0.05, 0.36, 0.05), carbon, M(x, 0.48, -0.98)));
+      parts.push(colored(box(1.16, 0.05, 0.26), '#e8b923', M(0, 0.68, -1.0, 0.12)));
+    }
+  }
   // Asiento
   parts.push(colored(box(0.44, 0.4, 0.3), carbon, M(0, 0.38, -0.36, -0.2)));
   // Piloto: torso, piernas, brazos y guantes
@@ -71,7 +131,7 @@ export function buildKartBody(color: string, suit: string, livery: LiveryStyle, 
   // Ejes
   parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5), '#555', M(0, 0.17, -0.62, 0, 0, Math.PI / 2)));
 
-  if (livery === 'ale') {
+  if (livery === 'ale' && bodyStyle !== 'retro') {
     // Franjas de carreras sobre morro y pontones
     for (const x of [-0.13, 0.13]) parts.push(colored(box(0.09, 0.02, 0.38), accent, M(x, 0.35, 0.84, -0.25)));
     for (const s of [-1, 1]) parts.push(colored(box(0.07, 0.02, 0.82), accent, M(s * 0.56, 0.375, 0.02)));
@@ -140,6 +200,8 @@ export interface KartLook {
   helmet?: HelmetStyle;
   name?: string;
   sponsor?: number;
+  /** Carrocería del modelo de chasis. */
+  body?: BodyStyle;
 }
 
 export interface KartOptions {
@@ -153,6 +215,7 @@ export interface KartOptions {
   /** Patrocinador de risa para las pegatinas laterales. */
   sponsor?: number;
   accent?: string;
+  body?: BodyStyle;
 }
 
 export function buildKart(colorIn: string, number: number, opts: KartOptions = {}): KartMesh {
@@ -171,7 +234,7 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
     mats.push(mat);
   }
   const suit = livery === 'ale' ? '#1b1b22' : darker(color, 0.55).getStyle();
-  const bodyMesh = new THREE.Mesh(buildKartBody(color, suit, livery, accent), mat);
+  const bodyMesh = new THREE.Mesh(buildKartBody(color, suit, livery, accent, opts.body), mat);
   bodyMesh.castShadow = !opts.ghost;
   body.add(bodyMesh);
 
@@ -210,7 +273,8 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
     const nm = new THREE.MeshLambertMaterial({ map: numberTex(number, color) });
     mats.push(nm);
     const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), nm);
-    plate.position.set(0, 0.362, 0.86);
+    const bs = opts.body ?? 'std';
+    plate.position.set(0, bs === 'tanque' ? 0.405 : bs === 'aero' ? 0.305 : bs === 'retro' ? 0.43 : 0.362, bs === 'retro' ? 0.8 : 0.86);
     plate.rotation.x = -1.32;
     body.add(plate);
     // Pontones: nombre (jugador) o patrocinador de risa (rivales)
@@ -219,7 +283,7 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
     mats.push(sm);
     for (const s of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.23), sm);
-      p.position.set(s * 0.692, 0.23, 0.02);
+      p.position.set(s * (bs === 'tanque' ? 0.755 : bs === 'aero' ? 0.655 : bs === 'retro' ? 0.685 : 0.692), 0.23, 0.02);
       p.rotation.y = (s * Math.PI) / 2;
       body.add(p);
     }

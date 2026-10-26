@@ -646,6 +646,121 @@ export class AudioEngine {
     });
   }
 
+  /** Chasquido de la radio del equipo. */
+  radioClick(): void {
+    this.noiseBurst(0.06, 0.12, 2200, 'bandpass');
+    this.tone(1750, 0.05, 'square', 0.04, 0.02);
+  }
+
+  // --- Efectos de la intro ---
+  /** Interruptor y zumbido de una bombilla. */
+  lampOn(): void {
+    this.tone(2200, 0.03, 'square', 0.08);
+    this.noiseBurst(0.04, 0.12, 3000, 'highpass');
+    this.tone(100, 0.6, 'sawtooth', 0.03, 0.05);
+  }
+
+  /** Fluorescentes que parpadean al encenderse. */
+  fluoro(): void {
+    [0, 0.12, 0.2, 0.45].forEach((at, i) => {
+      this.tone(1800 + i * 90, 0.03, 'square', 0.05, at);
+      this.tone(120, 0.12, 'sawtooth', 0.04, at + 0.01);
+    });
+    this.tone(120, 1.4, 'sawtooth', 0.025, 0.5);
+  }
+
+  /** Soplido de una tela que sale volando. */
+  whoosh(): void {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = this.noise;
+    const f = this.filter('bandpass', 300, 1.2);
+    const g = this.gain();
+    src.connect(f).connect(g).connect(this.sfx);
+    const t = c.currentTime;
+    f.frequency.setValueAtTime(250, t);
+    f.frequency.exponentialRampToValueAtTime(2600, t + 0.45);
+    f.frequency.exponentialRampToValueAtTime(900, t + 0.9);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.5, t + 0.25);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+    src.start(t, Math.random());
+    src.stop(t + 1);
+  }
+
+  /** Acorde dramático de revelación. */
+  stinger(): void {
+    for (const [f, ty] of [
+      [110, 'sawtooth'],
+      [164.8, 'sawtooth'],
+      [220, 'square'],
+      [277.2, 'triangle'],
+      [440, 'triangle'],
+    ] as [number, OscillatorType][]) {
+      if (!this.ctx) return;
+      const c = this.ctx;
+      const o = c.createOscillator();
+      o.type = ty;
+      o.frequency.value = f;
+      const lp = this.filter('lowpass', 900, 0.8);
+      const g = this.gain();
+      o.connect(lp).connect(g).connect(this.sfx);
+      const t = c.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.09, t + 0.08);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.6);
+      lp.frequency.exponentialRampToValueAtTime(3200, t + 0.6);
+      o.start(t);
+      o.stop(t + 2.7);
+    }
+    this.tone(55, 1.2, 'sine', 0.5, 0, 40);
+  }
+
+  /** Tirón del arrancador y el motor que tose sin arrancar. */
+  crankCough(): void {
+    this.noiseBurst(0.25, 0.25, 1400, 'bandpass');
+    this.tone(180, 0.25, 'sawtooth', 0.08, 0, 420);
+    [0.3, 0.45, 0.62, 0.86].forEach((at, i) => {
+      this.tone(70 - i * 6, 0.1, 'square', 0.22 - i * 0.04, at, 40);
+      this.noiseBurst(0.09, 0.25 - i * 0.05, 500, 'lowpass', at);
+    });
+  }
+
+  /** Petardazo del escape. */
+  backfire(): void {
+    this.noiseBurst(0.3, 0.9, 1200, 'lowpass');
+    this.tone(60, 0.35, 'sine', 0.7, 0, 30);
+    this.noiseBurst(0.12, 0.3, 3000, 'highpass', 0.02);
+  }
+
+  /** Trombón triste ("uah-uah-uaaah"). */
+  sadTrombone(): void {
+    const notes = [311, 293, 277, 261];
+    notes.forEach((n, i) => {
+      const last = i === notes.length - 1;
+      this.tone(n, last ? 1.1 : 0.32, 'sawtooth', 0.07, i * 0.36, last ? n * 0.94 : undefined);
+      this.tone(n / 2, last ? 1.1 : 0.32, 'triangle', 0.06, i * 0.36);
+    });
+  }
+
+  /** Persiana metálica del garaje subiendo. */
+  rollerDoor(dur = 2.2): void {
+    if (!this.ctx) return;
+    const t0 = this.ctx.currentTime;
+    for (let x = 0; x < dur; x += 0.045) this.grain(t0 + x + Math.random() * 0.02, 0.05, 0.08 + Math.random() * 0.06, 1500 + Math.random() * 1500);
+    this.tone(90, dur, 'sawtooth', 0.03);
+    this.tone(1100, 0.05, 'square', 0.08, dur);
+  }
+
+  /** Acorde dulce del final. */
+  sweetChord(): void {
+    [523.3, 659.3, 784, 1046.5].forEach((f, i) => {
+      this.tone(f, 2.4, 'triangle', 0.09, i * 0.12);
+      this.tone(f / 2, 2.4, 'sine', 0.06, i * 0.12);
+    });
+  }
+
   // --- Música de menú (secuenciador sencillo) ---
   startMusic(): void {
     this.wantMusic = true;

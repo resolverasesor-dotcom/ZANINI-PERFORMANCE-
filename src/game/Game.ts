@@ -24,7 +24,8 @@ import { Podium, Showroom } from '../engine/Showroom';
 import { PostFX } from '../engine/PostFX';
 import type { KartLook } from '../engine/KartModel';
 import type { HelmetStyle, LiveryStyle } from '../engine/livery';
-import { getProgress, newUnlocks, UNLOCKS, type Unlockable } from '../race/unlocks';
+import { getProgress, isUnlocked, newUnlocks, UNLOCKS, type Unlockable } from '../race/unlocks';
+import { AI_CHASSIS, CHASSIS, getChassis, type ChassisId } from '../physics/chassis';
 import {
   applyRace,
   clearChampionship,
@@ -48,6 +49,8 @@ import { el, esc, logoHTML } from '../ui/dom';
 import { drawLayout } from '../ui/Minimap';
 import { navigate } from '../ui/nav';
 import { TouchControls } from '../ui/TouchControls';
+import { Intro } from './Intro';
+import { load as loadKey, save as saveKey } from '../core/Storage';
 import { RaceView, type GameCtx, type PlayerStats, type SessionOutcome, type SessionSetup } from './RaceView';
 import { positionsChart, raceSummary } from '../ui/raceReport';
 
@@ -75,6 +78,7 @@ export class Game {
   private view: RaceView | null = null;
   private showroom: Showroom;
   private podium: Podium | null = null;
+  private intro: Intro | null = null;
   private last = performance.now();
   private booted = false;
   private menuBack: (() => void) | null = null;
@@ -184,6 +188,15 @@ export class Game {
       this.view.frame(dt);
       return;
     }
+    const aspectI = window.innerWidth / window.innerHeight;
+    if (this.intro) {
+      this.input.poll();
+      this.intro.update(dt, aspectI);
+      this.post?.setLook({ bloom: 0.45, threshold: 1.0, vignette: 0.6 });
+      this.post?.setSpeed(0);
+      this.draw(this.intro.scene, this.intro.camera);
+      return;
+    }
     const ctrl = this.input.poll();
     if (!this.booted) {
       if (ctrl.nav.confirm || ctrl.throttle > 0 || ctrl.pause) this.boot();
@@ -255,7 +268,23 @@ export class Game {
     this.audio.unlock();
     this.menuMusic();
     this.audio.select();
-    this.showMain();
+    if (!loadKey<boolean>('introSeen', false)) this.playIntro();
+    else this.showMain();
+  }
+
+  /** Intro cinemática (la primera vez y desde el menú). */
+  private playIntro(): void {
+    this.screen.innerHTML = '';
+    this.screen.className = 'screen hidden';
+    this.menuBack = null;
+    this.intro = new Intro(this.ui, this.audio, this.playerLook(), this.settings.quality !== 'bajo', () => {
+      const it = this.intro;
+      this.intro = null;
+      it?.dispose();
+      saveKey('introSeen', true);
+      this.screen.classList.remove('hidden');
+      this.showMain();
+    });
   }
 
   // ---------------- menú principal ----------------
@@ -286,10 +315,12 @@ export class Game {
           }
           ${champ ? `<button class="btn primary" data-act="continue">▶ Continuar campeonato · GP ${Math.min(6, champ.round + 1)}/6</button>` : ''}
           ${modes}
-          <div class="row3">
+          <div class="row-btns">
+            <button class="btn" data-act="garage">🏎 Garaje</button>
             <button class="btn" data-act="profile">👤 Perfil</button>
             <button class="btn" data-act="settings">⚙ Ajustes</button>
             <button class="btn" data-act="tutorial">🎓 Tutorial</button>
+            <button class="btn" data-act="intro">🎬 Intro</button>
           </div>
           ${isMobile() && document.fullscreenEnabled ? `<button class="btn" data-act="fullscreen">⛶ Pantalla completa</button>` : ''}
         </div>
@@ -302,6 +333,8 @@ export class Game {
         mode: (b) => this.onMode(b.dataset.mode as Mode),
         continue: () => this.champHub(),
         profile: () => this.showProfile(),
+        garage: () => this.showGarage(),
+        intro: () => this.playIntro(),
         tutorial: () => this.startTutorial(),
         notut: () => {
           const t = loadTrophies();
@@ -483,12 +516,13 @@ export class Game {
   // ---------------- participantes ----------------
   private playerLook(): KartLook {
     const p = this.profile;
-    return { color: p.color, number: p.number, livery: p.livery, helmet: p.helmet, name: p.name };
+    return { color: p.color, number: p.number, livery: p.livery, helmet: p.helmet, name: p.name, body: getChassis(p.chassis).body };
   }
 
   private playerEntrant(): Entrant {
     const p = this.profile;
-    return { id: 'player', name: p.name, short: p.name.slice(0, 3).toUpperCase(), nat: 'ESP', number: p.number, color: p.color, isPlayer: true, driver: null, look: this.playerLook() };
+    const chassis = isUnlocked('chassis', p.chassis) ? p.chassis : 'r1';
+    return { id: 'player', name: p.name, short: p.name.slice(0, 3).toUpperCase(), nat: 'ESP', number: p.number, color: p.color, isPlayer: true, driver: null, look: this.playerLook(), chassis };
   }
 
   private aiEntrant(d: DriverDef): Entrant {
@@ -496,8 +530,10 @@ export class Game {
     const idx = DRIVERS.indexOf(d);
     const number = clash ? d.number + 70 : d.number;
     const helmets: HelmetStyle[] = ['clasico', 'rayo', 'estrellas', 'llamas'];
-    const look: KartLook = { color: d.color, number, sponsor: idx, helmet: helmets[idx % helmets.length], livery: 'basica' };
-    return { id: d.id, name: d.name, short: d.short, nat: d.nat, number, color: d.color, isPlayer: false, driver: d, look };
+    // Cada rival lleva su modelo de kart (variedad en pista; están equilibrados entre sí)
+    const chassis = AI_CHASSIS[idx % AI_CHASSIS.length];
+    const look: KartLook = { color: d.color, number, sponsor: idx, helmet: helmets[idx % helmets.length], livery: 'basica', body: getChassis(chassis).body };
+    return { id: d.id, name: d.name, short: d.short, nat: d.nat, number, color: d.color, isPlayer: false, driver: d, look, chassis };
   }
 
   private allEntrants(): Entrant[] {
@@ -932,6 +968,66 @@ export class Game {
     );
   }
 
+  // ---------------- garaje (modelo de kart) ----------------
+  private showGarage(): void {
+    const p = this.profile;
+    const prog = getProgress();
+    const bars = (n: number) => `<span class="sbar">${'<i class="on"></i>'.repeat(n)}${'<i></i>'.repeat(5 - n)}</span>`;
+    const render = () => {
+      const cards = CHASSIS.map((c) => {
+        const ok = isUnlocked('chassis', c.id, prog);
+        const req = UNLOCKS.find((u) => u.kind === 'chassis' && u.id === c.id)?.req ?? '';
+        const on = c.id === p.chassis;
+        return `<button class="kart-card ${on ? 'on' : ''} ${ok ? '' : 'locked'}" data-act="${ok ? 'pickc' : 'lockedc'}" data-val="${c.id}" data-req="${esc(req)}">
+          <div class="kc-head"><b>${ok ? '' : '🔒 '}${esc(c.name)}</b>${on ? '<span class="kc-sel">✔ EN PISTA</span>' : ''}</div>
+          <div class="kc-tag">${esc(c.tagline)}</div>
+          <div class="kc-stats">
+            <span>Punta</span>${bars(c.stats.punta)}<span>Aceleración</span>${bars(c.stats.acel)}
+            <span>Agarre</span>${bars(c.stats.agarre)}<span>Agilidad</span>${bars(c.stats.agil)}
+          </div>
+          <div class="kc-style">${ok ? esc(c.style) : `🔒 ${esc(req)}`}</div>
+        </button>`;
+      }).join('');
+      this.show(
+        `<div class="page with-preview garage">
+          <div class="page-head">${this.backBtn()}<h1>Garaje</h1><div class="page-sub">Elige tu kart · todos van parecido de rápido, cada uno se conduce distinto</div></div>
+          <div class="kart-grid">${cards}</div>
+        </div>`,
+        {
+          back: () => {
+            this.showroom.setKart(this.playerLook());
+            this.showMain();
+          },
+          pickc: (b) => {
+            p.chassis = b.dataset.val as ChassisId;
+            saveProfile(p);
+            this.audio.select();
+            render();
+          },
+          lockedc: (b) => {
+            this.audio.warning();
+            const t = b.querySelector('.kc-style');
+            if (t) t.innerHTML = `🔒 <b>Bloqueado:</b> ${esc(b.dataset.req ?? '')}`;
+          },
+        },
+        () => {
+          this.showroom.setKart(this.playerLook());
+          this.showMain();
+        },
+        'menu',
+      );
+      this.showroom.setKart(this.playerLook());
+      // Vista previa del modelo al pasar por encima (también los bloqueados: ¡que den ganas!)
+      this.screen.querySelectorAll<HTMLElement>('.kart-card').forEach((el) => {
+        const on = () => this.showroom.setKart({ ...this.playerLook(), body: getChassis(el.dataset.val).body });
+        el.addEventListener('mouseenter', on);
+        el.addEventListener('focus', on);
+        el.addEventListener('mouseleave', () => this.showroom.setKart(this.playerLook()));
+      });
+    };
+    render();
+  }
+
   // ---------------- perfil ----------------
   private showProfile(): void {
     const p = this.profile;
@@ -1024,7 +1120,7 @@ export class Game {
     const fresh = newUnlocks();
     fresh.forEach((u, i) => {
       setTimeout(() => {
-        const kind = u.kind === 'color' ? 'Color' : u.kind === 'helmet' ? 'Casco' : 'Decoración';
+        const kind = u.kind === 'color' ? 'Color' : u.kind === 'helmet' ? 'Casco' : u.kind === 'chassis' ? 'Kart' : 'Decoración';
         let box = this.ui.querySelector('.toasts');
         if (!box) {
           box = el('div', 'toasts');
@@ -1073,7 +1169,8 @@ export class Game {
         <div class="hint">FPS actuales: ${Math.round(this.fps)}</div>`;
     } else if (tab === 'audio') {
       body = `${this.range('Volumen general', 'volume', s.volume)}${this.range('Efectos', 'sfx', s.sfx)}${this.range('Música', 'musicVolume', s.musicVolume)}
-        ${this.choice('Música de menú', 'music', [['on', 'Activada'], ['off', 'Desactivada']], s.music ? 'on' : 'off')}`;
+        ${this.choice('Música de menú', 'music', [['on', 'Activada'], ['off', 'Desactivada']], s.music ? 'on' : 'off')}
+        ${this.choice('Radio del equipo (comentarios de papá)', 'radio', [['on', 'Sí'], ['off', 'No']], s.radio !== false ? 'on' : 'off')}`;
     } else if (tab === 'controles') {
       const rows = (Object.keys(ACTION_LABELS) as Action[])
         .map((a) => `<div class="keyrow"><span>${ACTION_LABELS[a]}</span><span class="keys">${s.keys[a].map(keyName).join(' / ')}</span><button class="btn sm" data-act="rebind" data-val="${a}">Cambiar</button></div>`)
@@ -1160,6 +1257,11 @@ export class Game {
         },
         touchsteer: (b) => {
           s.touchSteer = b.dataset.val as Settings['touchSteer'];
+          save();
+          re();
+        },
+        radio: (b) => {
+          s.radio = b.dataset.val === 'on';
           save();
           re();
         },

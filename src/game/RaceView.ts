@@ -1,4 +1,5 @@
 import { filterSteer } from '../core/steerFilter';
+import { TeamRadio } from '../ui/TeamRadio';
 import * as THREE from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { DIFF_SPEED, type Difficulty } from '../ai/Drivers';
@@ -296,6 +297,8 @@ export class RaceView {
           : { bloom: 0.38, threshold: 0.98, vignette: 0.3, sat: 1.1 },
     );
     this.hud = new Hud(ctx.uiRoot);
+    this.radio = new TeamRadio(ctx.uiRoot, () => ctx.audio.radioClick());
+    this.radio.enabled = ctx.settings.radio !== false && setup.label !== 'Tutorial';
     this.minimap = new Minimap(this.track, window.innerWidth < 700 ? 110 : 170);
     this.hud.mapSlot.appendChild(this.minimap.canvas);
     this.hud.showTower(setup.kind === 'race' || setup.kind === 'quali');
@@ -430,6 +433,59 @@ export class RaceView {
   }
 
   // ---------- bucle ----------
+  private radio: TeamRadio;
+  /** Estado para los comentarios de la radio. */
+  private rs = { pos: 0, posT: 0, off: 0, drift: 0, hopSaid: false, lastSaid: false, leadSaid: false };
+
+  /** Comentarios de la radio según lo que pasa en pista (se llama una vez por fotograma). */
+  private radioWatch(dt: number): void {
+    const r = this.radio;
+    r.tick(dt);
+    const p = this.player;
+    if (!p || p.finished || this.sim.phase !== 'racing') return;
+    const k = p.kart;
+    const st = this.rs;
+    const v = this.views.find((x) => x.comp === p);
+    if (v) {
+      if (v.wallImpact > 3) r.say('wall');
+      else if (v.kartImpact > 2.5) r.say('kart');
+    }
+    const off = k.surface === 'grass' || k.surface === 'sand' || k.surface === 'gravel';
+    st.off = off && k.speed > 4 ? st.off + dt : 0;
+    if (st.off > 1.3) r.say('offtrack');
+    st.drift = k.slipRear > 0.2 && k.speed > 9 && !off ? st.drift + dt : 0;
+    if (st.drift > 0.7) {
+      r.say('drift');
+      st.drift = 0;
+    }
+    if (!st.hopSaid && v?.events.includes('hop')) {
+      st.hopSaid = true;
+      r.say('hop');
+    }
+    if (this.setup.kind === 'race' && this.sim.time > 4) {
+      const pos = p.position;
+      if (st.pos && pos !== st.pos) {
+        st.posT += dt;
+        // Esperar a que el cambio se asiente (evita parloteo en un toque a toque)
+        if (st.posT > 1.2) {
+          if (pos === 1 && !st.leadSaid) {
+            st.leadSaid = true;
+            r.say('lead');
+          } else if (pos < st.pos) r.say('gain');
+          else if (pos === this.sim.comps.length && !st.lastSaid && p.lapsDone >= 1) {
+            st.lastSaid = true;
+            r.say('last');
+          } else r.say('lose');
+          st.pos = pos;
+          st.posT = 0;
+        }
+      } else {
+        st.pos = pos;
+        st.posT = 0;
+      }
+    }
+  }
+
   frame(dt: number): void {
     if (this.done) return;
     const ctrl = this.ctx.input.poll();
@@ -518,6 +574,7 @@ export class RaceView {
     }
     const alpha = this.acc / STEP;
     this.visualTime += dt;
+    this.radioWatch(dt);
     if (this.tutorial) {
       const pv = this.views.find((v) => v.comp === player);
       if (pv?.events.includes('hop')) this.tutorial.hop();
@@ -883,6 +940,7 @@ export class RaceView {
     const a = this.ctx.audio;
     switch (e.type) {
       case 'light':
+        if (e.n === 1 && this.setup.kind === 'race') this.radio.say('start');
         hud.setLights(e.n, true);
         this.trackScene.setStartLights(e.n);
         a.lightBeep();
@@ -897,6 +955,7 @@ export class RaceView {
         break;
       case 'jumpstart':
         if (this.isPlayer(e.id)) {
+          this.radio.say('jumpstart');
           hud.subMessage('SALIDA ANTICIPADA · +5 s', 'bad', 3.5);
           a.warning();
         }
@@ -915,6 +974,7 @@ export class RaceView {
         break;
       case 'invalid':
         if (this.isPlayer(e.id)) {
+          this.radio.say('invalid');
           hud.subMessage('VUELTA INVALIDADA · has atajado', 'bad', 3);
           a.warning();
         }
@@ -931,6 +991,7 @@ export class RaceView {
         break;
       case 'lastlap':
         hud.subMessage('ÚLTIMA VUELTA', 'warn', 2.5);
+        if (this.player && !this.player.finished) this.radio.say('lastlap');
         break;
       case 'flag':
         hud.setFlag('checkered');
@@ -938,6 +999,7 @@ export class RaceView {
       case 'finish':
         if (this.isPlayer(e.id)) {
           const pos = this.sim.player!.position;
+          if (this.setup.kind === 'race') this.radio.say(pos === 1 ? 'win' : pos <= 3 ? 'podium' : 'finish');
           hud.message(`<span class="flagtxt">🏁</span> ¡META! <b>P${pos}</b>`, 'finish', 5);
           a.fanfare();
           a.cheer(1);
@@ -983,6 +1045,7 @@ export class RaceView {
           hud.subMessage(`${MEDAL_ICON[after]} ¡MEDALLA DE ${after.toUpperCase()}! ${formatTime(time)}`, 'purple', 4);
           this.ctx.audio.fanfare();
         } else hud.subMessage(prev == null ? '¡PRIMER RÉCORD PERSONAL!' : `¡NUEVO RÉCORD PERSONAL! ${formatDelta(time - prev)}`, 'purple', 3.5);
+        if (prev != null) this.radio.say('record');
       }
       if (changed) saveRecord(this.setup.trackId, rec);
       if (best && (kind === 'practice' || kind === 'timetrial')) {
@@ -992,7 +1055,10 @@ export class RaceView {
     }
     const txt = `${kind === 'race' ? `VUELTA ${lap}` : 'VUELTA'} · ${formatTime(time)}`;
     if (!valid) hud.message(`<span class="strike">${formatTime(time)}</span>`, 'bad', 2.2);
-    else if (best && p.lapTimes.length > 1) hud.message(`¡MEJOR VUELTA! ${formatTime(time)}`, 'purple', 2.5);
+    else if (best && p.lapTimes.length > 1) {
+      hud.message(`¡MEJOR VUELTA! ${formatTime(time)}`, 'purple', 2.5);
+      this.radio.say('bestlap');
+    }
     else hud.message(txt, '', 2);
     this.ctx.audio.lapChime(best && valid);
     this.lapSectors = [null, null, null];
@@ -1124,6 +1190,7 @@ export class RaceView {
       if (o instanceof THREE.Mesh && o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
     });
     this.hud.dispose();
+    this.radio.dispose();
     this.pauseEl.remove();
     this.tutorial?.dispose();
     this.replayEl?.remove();

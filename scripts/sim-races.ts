@@ -5,6 +5,7 @@ import { CIRCUITS } from '../src/track/circuits/index';
 import { Track } from '../src/track/Track';
 import { computeRacingLine } from '../src/ai/RacingLine';
 import { DRIVERS, DIFF_SPEED, type Difficulty } from '../src/ai/Drivers';
+import { AI_CHASSIS } from '../src/physics/chassis';
 import { RaceSim, referenceLap, type Entrant } from '../src/race/RaceSim';
 import { emptyInput } from '../src/physics/Kart';
 
@@ -19,7 +20,7 @@ for (const def of CIRCUITS) {
   const t0 = Date.now();
   const ref = referenceLap(track, 1.0);
   const refN = referenceLap(track, DIFF_SPEED[diff]);
-  const entrants: Entrant[] = DRIVERS.map((d) => ({ id: d.id, name: d.name, short: d.short, nat: d.nat, number: d.number, color: d.color, isPlayer: false, driver: d }));
+  const entrants: Entrant[] = DRIVERS.map((d, i) => ({ id: d.id, name: d.name, short: d.short, nat: d.nat, number: d.number, color: d.color, isPlayer: false, driver: d, chassis: AI_CHASSIS[i % AI_CHASSIS.length] }));
   const sim = new RaceSim({ track, kind: 'race', laps: 3, difficulty: diff, entrants, seed: 7 });
   let respawns = 0;
   for (const c of sim.comps) {

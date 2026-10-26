@@ -37,7 +37,7 @@ export function getProgress(): Progress {
 }
 
 export interface Unlockable {
-  kind: 'color' | 'helmet' | 'livery';
+  kind: 'color' | 'helmet' | 'livery' | 'chassis';
   id: string;
   label: string;
   req: string;
@@ -70,6 +70,13 @@ export const UNLOCKS: Unlockable[] = [
   { kind: 'livery', id: 'cuadros', label: 'Bandera a cuadros', req: 'Gana 3 carreras', ok: (p) => p.wins >= 3 },
   { kind: 'livery', id: 'llamas', label: 'Llamas', req: 'Medalla de plata (o mejor) en 3 contrarrelojes', ok: (p) => p.silvers >= 3 },
   { kind: 'livery', id: 'oro', label: 'Oro cromado', req: 'Gana un campeonato en Difícil o Pro', ok: (p) => p.titlesHard >= 1 },
+  // Modelos de kart
+  { kind: 'chassis', id: 'r1', label: 'Zanini R1', req: '', ok: free },
+  { kind: 'chassis', id: 'saeta', label: 'Saeta S7', req: '', ok: free },
+  { kind: 'chassis', id: 'toro', label: 'Toro V12*', req: '', ok: free },
+  { kind: 'chassis', id: 'lapa', label: 'Lapa GT', req: '', ok: free },
+  { kind: 'chassis', id: 'tostadora', label: 'La Tostadora 1978', req: 'Consigue un podio', ok: (p) => p.podiums >= 1 },
+  { kind: 'chassis', id: 'ale', label: 'Bólido de Ale', req: 'Gana una carrera', ok: (p) => p.wins >= 1 },
 ];
 
 export function isUnlocked(kind: Unlockable['kind'], id: string, p = getProgress()): boolean {

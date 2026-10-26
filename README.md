@@ -24,7 +24,44 @@ npm run test:tracks   # valida los circuitos (solapes, radios, recta de salida)
 npm run test:laps     # tiempos de vuelta por cilindrada (ninguno pasa de 1:20)
 npm run test:ai       # 12 IA corren una carrera en cada circuito: nadie se atasca ni atraviesa muros
 npm run test:assists  # comprueba que las ayudas mantienen en pista a un jugador torpe
+npm run test:physics  # banco de dinámica del kart
+npm run test:chassis  # modelos de kart: tiempos equilibrados (±1,5 %) y carácter de cada uno
 ```
+
+## Intro
+
+La primera vez que se abre el juego hay un **cortometraje de ~50 s** hecho con el propio motor:
+un garaje de Alicante a las 03:47, un padre, un plano que pone *PROYECTO ALE*, 47 cafés, una lavadora
+"donante", un kart bajo una sábana que sale volando, un motor que tose dos veces (y un petardazo con
+trombón triste) antes de arrancar… y la verdad sobre cómo se conduce: sin turbos, sin misiles, derrape
+de verdad y el famoso **saltito**. Termina con la dedicatoria. Se puede saltar (botón *Saltar* o Esc) y
+volver a ver desde el menú (**🎬 Intro**). Escenas, subtítulos y efectos de sonido están en
+`src/game/Intro.ts`; todo es código (sin vídeos ni audios).
+
+## Garaje: modelos de kart
+
+En **🏎 Garaje** eliges el kart. Cada modelo cambia magnitudes físicas reales (masa, inercia de
+guiñada, potencia y punta, compuesto del neumático, reparto de rigidez del chasis, frenos) y tiene
+su propia carrocería 3D. Están equilibrados: el tiempo por vuelta es parecido (`npm run test:chassis`),
+lo que cambia es cómo se conducen.
+
+| Modelo | Carácter |
+| --- | --- |
+| **Zanini R1** | Equilibrado. El de referencia. |
+| **Saeta S7** | Ligero y ágil, morro afilado. Gira enseguida y la zaga se suelta con facilidad. |
+| **Toro V12\*** | Ancho, con cuernos y doble escape. Mucha punta y empuje, pesado y subvirador. (\*Tiene un cilindro.) |
+| **Lapa GT** | Mucho agarre y muy noble: ideal para empezar. Algo menos de motor. |
+| **La Tostadora 1978** | Tubos cromados, faro redondo y motor-tostadora (con tostadas). Potente y resbaladiza. Se desbloquea con un podio. |
+| **Bólido de Ale** | Corazón en el morro, detalles dorados y alerón. Lo mejor de cada uno. Se desbloquea ganando una carrera. |
+
+Los rivales también llevan modelos distintos, así que en pista se ven karts diferentes.
+
+## Radio del equipo
+
+Durante la carrera, **papá habla por la radio** desde el muro: salida, adelantamientos (ganados y
+perdidos), liderato, golpes contra la barrera o con otros karts, salidas a la hierba, derrapes largos,
+el primer saltito, vuelta rápida, récord, última vuelta y el resultado. Con humor y sin agobiar
+(pausas entre mensajes). Se quita en *Ajustes → Audio*. Frases en `src/ui/TeamRadio.ts`.
 
 ## Cómo jugar
 
@@ -167,7 +204,8 @@ En **Contrarreloj** cada circuito tiene medallas 🥇🥈🥉 (el oro es el réc
 
 ## Desbloqueables
 
-En *Perfil* eliges color, decoración del kart (la **Edición Ale** viene de serie) y casco.
+En *Perfil* eliges color, decoración del kart (la **Edición Ale** viene de serie) y casco; en *Garaje*, el
+modelo de kart (dos se ganan: La Tostadora y el Bólido de Ale).
 Otros se ganan jugando: victorias, podios, campeonatos (en Difícil/Pro, el kart de **oro cromado**),
 récords y medallas de contrarreloj.
 
@@ -275,13 +313,13 @@ grandstand, tyres, banner, cone, crate, promenade`. `sea` añade mar (ver `costa
 src/
   core/      utilidades, entrada (teclado/mando/táctil), ajustes, guardado
   track/     circuitos como datos + Track (muestreo de la spline, proyecciones)
-  physics/   vehículo de 4 ruedas (cargas por rueda, eje macizo, neumático combinado), colisiones
+  physics/   vehículo de 4 ruedas (cargas por rueda, eje macizo, neumático combinado), modelos de kart, colisiones
   ai/        pilotos, línea de carrera y conductor IA
   race/      simulación de sesión y reglamento, fantasma/récords, campeonato
   engine/    render: escena del circuito, kart low-poly, partículas, cámara, texturas
   audio/     motor, efectos y música con Web Audio
   ui/        HUD, minimapa, controles táctiles, estilos
-  game/      flujo de menús y modos (Game) y vista de carrera (RaceView)
+  game/      flujo de menús y modos (Game), vista de carrera (RaceView) e intro cinemática (Intro)
 ```
 
 La simulación (`race/RaceSim.ts`) no depende del render: corre a 120 Hz fijos y es la

@@ -1,3 +1,4 @@
+import type { ChassisId } from '../physics/chassis';
 import type { Difficulty } from '../ai/Drivers';
 import { load, save } from './Storage';
 import type { HelmetStyle, LiveryStyle } from '../engine/livery';
@@ -71,6 +72,8 @@ export interface Settings {
   speedLines: boolean;
   ghost: boolean;
   vibration: boolean;
+  /** Radio del equipo (comentarios de papá durante la carrera). */
+  radio: boolean;
 }
 
 export interface Profile {
@@ -80,6 +83,8 @@ export interface Profile {
   /** Decoración del kart (ver engine/livery.ts). */
   livery: LiveryStyle;
   helmet: HelmetStyle;
+  /** Modelo de kart elegido en el garaje. */
+  chassis: ChassisId;
 }
 
 function isMobile(): boolean {
@@ -109,6 +114,7 @@ export function defaultSettings(): Settings {
     speedLines: true,
     ghost: true,
     vibration: true,
+    radio: true,
   };
 }
 
@@ -139,7 +145,7 @@ export function saveSettings(s: Settings): void {
 }
 
 export function loadProfile(): Profile {
-  return { name: 'ALE', number: 7, color: '#D7261E', livery: 'ale', helmet: 'estrellas', ...load<Partial<Profile>>('profile', {}) };
+  return { name: 'ALE', number: 7, color: '#D7261E', livery: 'ale', helmet: 'estrellas', chassis: 'r1', ...load<Partial<Profile>>('profile', {}) };
 }
 
 export function saveProfile(p: Profile): void {
