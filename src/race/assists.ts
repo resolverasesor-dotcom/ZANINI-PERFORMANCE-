@@ -44,7 +44,9 @@ export class DriverAssist {
 
     // Control de estabilidad: si la zaga se suelta, el copiloto ayuda a contravolantear
     // y el control de tracción corta gas (como en un coche; la física no se toca).
-    const rearSlide = clamp((Math.abs(k.slipRear) - 0.12) / 0.15, 0, 1);
+    // En media deja derrapar (hasta ~20°) y solo evita el trompo.
+    const slideFrom = strong ? 0.14 : 0.34;
+    const rearSlide = clamp((Math.abs(k.slipRear) - slideFrom) / 0.2, 0, 1);
     if (rearSlide > 0) {
       const mix = (strong ? 0.85 : 0.6) * rearSlide;
       pi.steer = clamp(pi.steer * (1 - mix) + sc.steer * mix, -1, 1);

@@ -38,7 +38,7 @@ for (const level of ((process.argv[3] ?? 'media,maxima').split(',')) as AssistLe
         inp.steer = Math.max(-1, Math.min(1, d * 1.15 + Math.sin(i / 37) * 0.25));
       }
       // Misma cadena que en el juego: filtro de entrada del mando y después la ayuda
-      inp.steer = filterSteer(inp.steer, k.vF, true);
+      inp.steer = filterSteer(inp.steer, k.vF, true, k.vL);
       assist.apply(inp, level, dt);
       k.step(dt, inp, t);
       let ds = k.proj.s - last;

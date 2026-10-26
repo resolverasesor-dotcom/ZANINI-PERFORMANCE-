@@ -86,7 +86,11 @@ el arrastre del eje en curva y la rueda trasera interior en el aire **salen** de
 - **Dirección con geometría Ackermann** (cada rueda delantera su ángulo) y ángulo máximo fijo de 23°:
   la física **no** reduce la dirección con la velocidad. Como con teclado o pantalla no se puede dosificar
   2–3° de volante a 90 km/h, hay un **filtro de entrada del mando** (`src/core/steerFilter.ts`, se puede
-  quitar en *Ajustes → Controles*), fuera de la física.
+  quitar en *Ajustes → Controles*), fuera de la física. "A tope" equivale al giro en el límite de agarre
+  (~1,5 g), un poco por encima en curva rápida para que la trasera **derrape de forma natural** (5–15°), y
+  menor en horquillas lentas, donde el eje macizo levanta la rueda interior y hay menos agarre. Además
+  imita el **autoalineado del avance**: cuando la zaga se va, las ruedas buscan la dirección de marcha
+  (contravolante), así que el derrape se sostiene y se recupera en lugar de acabar en trompo.
 - **Saltito**: el piloto se levanta y echa el cuerpo hacia fuera y hacia delante. No multiplica nada: cambia
   el reparto de cargas (el peso total se conserva), descarga la trasera interior y libera el eje. Ayuda a
   girar en las curvas lentas; al límite puede hacer que la zaga se suelte.

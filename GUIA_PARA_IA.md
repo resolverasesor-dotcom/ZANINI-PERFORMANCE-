@@ -29,7 +29,7 @@ Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart), `?sp
 | Carpeta | Qué hay | Lo más importante |
 | --- | --- | --- |
 | `src/physics/Kart.ts`, `tyre.ts` | Física del kart | Vehículo de 4 ruedas a 960 Hz: cargas por rueda (transferencias + jacking del avance), neumático de deslizamiento combinado con relajación, eje trasero macizo, ruedas con inercia, embrague centrífugo, frenos con bloqueo, Ackermann, choques por impulso. Constantes en `KART`, `TYRE_FRONT`, `TYRE_REAR`. |
-| `src/core/steerFilter.ts` | Filtro del mando | Escala la dirección del jugador con la velocidad (capa de entrada, no física). |
+| `src/core/steerFilter.ts` | Filtro del mando | Escala la dirección del jugador con la velocidad (tope = límite de agarre, algo más en curva rápida para derrapar) y añade el contravolante del autoalineado del avance. Capa de entrada, no física. |
 | `src/ai/` | IA | `RacingLine.ts` (trazada por banda elástica + perfil de velocidad), `AIDriver.ts` (persecución pura + dirección estacionaria, adelantar/defender, errores, saltitos, anti-atascos), `Drivers.ts` (11 pilotos). |
 | `src/race/` | Reglamento | `RaceSim.ts` (sesión sin render: semáforo, salida anticipada, atajos, tiempos, posiciones, resultados), campeonato, fantasma/récords, medallas, desbloqueables, `assists.ts`. |
 | `src/track/` | Circuitos como datos | Un circuito = polígono con radios (`circuits/helpers.ts → rounded()`). `Track.ts` muestrea la spline cada ~1 m. Añadir circuito: nuevo `TrackDef` y registrarlo en `circuits/index.ts`. |

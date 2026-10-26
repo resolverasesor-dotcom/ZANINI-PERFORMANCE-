@@ -467,7 +467,7 @@ export class RaceView {
 
     const pi = this.playerInput;
     // Filtro de entrada del mando (la física no limita la dirección)
-    pi.steer = filterSteer(ctrl.steer, this.player?.kart.vF ?? 0, this.ctx.settings.steerFilter !== false);
+    pi.steer = filterSteer(ctrl.steer, this.player?.kart.vF ?? 0, this.ctx.settings.steerFilter !== false, this.player?.kart.vL ?? 0);
     // Con aceleración automática no se acelera en parrilla (evita la salida anticipada)
     pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
     pi.brake = ctrl.brake;
