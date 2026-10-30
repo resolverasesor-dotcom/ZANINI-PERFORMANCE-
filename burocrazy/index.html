@@ -101,6 +101,24 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
 .cal .pas{opacity:.45}
 .cal .dot{display:block;font-size:10px;line-height:1}
 .cal .h{background:none;font-weight:bold}
+
+/* formularios oficiales */
+.paper{background:var(--papel);border:2px solid #333;border-radius:4px;padding:12px 14px;font-family:"Courier New",monospace;position:relative;box-shadow:inset 0 0 0 4px #fff,inset 0 0 0 5px #bbb}
+.paper .org{display:flex;justify-content:space-between;font-size:12px;border-bottom:2px solid #333;padding-bottom:5px;margin-bottom:8px;font-weight:bold;text-transform:uppercase}
+.paper h3{font-family:"Courier New",monospace;margin:4px 0 10px;font-size:17px}
+.fld{margin:9px 0;font-size:14px}
+.fld>label,.fld>.lab{display:block;font-weight:bold;margin-bottom:3px}
+.fld .help{font-size:12px;color:#6b645a;font-style:italic}
+.fld select,.fld input[type=text],.fld input[type=number]{width:100%;font:inherit;padding:5px 6px;border:2px solid #333;border-radius:3px;background:#fff}
+.fld .opt{display:block;margin:2px 0;font-weight:normal;cursor:pointer}
+.fld .opt input{margin-right:6px}
+.casilla{display:inline-block;background:#333;color:#fff;font-size:11px;padding:0 4px;margin-right:4px;border-radius:2px}
+.stamp{position:absolute;right:12px;top:40%;transform:rotate(-14deg) scale(1);border:5px solid;border-radius:8px;padding:6px 14px;font:900 30px Impact,"Arial Black",sans-serif;letter-spacing:2px;opacity:.88;animation:stamp .35s cubic-bezier(.2,2,.4,1)}
+.stamp.ok{color:#1d7a43;border-color:#1d7a43}.stamp.no{color:var(--sello);border-color:var(--sello)}
+@keyframes stamp{from{transform:rotate(-14deg) scale(3);opacity:0}to{transform:rotate(-14deg) scale(1);opacity:.88}}
+.pantalla{font:bold 46px "Courier New",monospace;background:#111;color:#ff3b30;text-align:center;border-radius:10px;padding:8px;margin:10px auto;width:220px;letter-spacing:4px;text-shadow:0 0 8px #ff3b30}
+.tlist .item{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.big{font-size:22px}
 </style>
 </head>
 <body>
@@ -117,6 +135,7 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
   <div id="cross"></div>
   <div id="hint" class="hidden"></div>
   <div id="hand">Manos vacías</div>
+  <button class="btn pri hidden" id="btnDay" style="position:absolute;right:10px;bottom:10px;pointer-events:auto">☀️ Volver al día (Enter)</button>
 </div>
 <div id="toasts"></div>
 <div id="pausa" class="hidden">PAUSA<br><small>Haz clic para volver a la cocina</small></div>
@@ -257,7 +276,8 @@ function addXp(n, why) { const l0 = level(); S.xp += n; if (level() > l0) toast(
 function addRep(d) { S.rep = clamp(S.rep + d, 0, 5); }
 
 /* hooks para que cada fase enganche su lógica */
-const Hooks = { dayStart: [], dayEnd: [], update: [], prep: [], newDay: [], interact: [], summary: [] };
+const Hooks = { dayStart: [], dayEnd: [], update: [], prep: [], newDay: [], interact: [], summary: [], apply: [] };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* =====================================================================
    ESCENA 3D (low-poly)
@@ -523,7 +543,7 @@ function applyUpgrades() {
   stations.freidora.grp.visible = u.freidora;
   stations.bebidas.grp.visible = u.carta;
   stations.bin_tomate.grp.visible = u.carta; stations.bin_bacon.grp.visible = u.carta;
-  if (window.applyTerraza) window.applyTerraza();
+  for (const h of Hooks.apply) h();
 }
 
 /* =====================================================================
@@ -571,6 +591,7 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (uiBlocking()) { if ((e.code === 'Tab' || e.code === 'KeyM') && !$('#phone').classList.contains('hidden')) { e.preventDefault(); closePhone(); } return; }
   if (e.code === 'KeyE') doInteract();
+  if (e.code === 'Enter' && walking) endWalk();
   if (e.code === 'Tab' || e.code === 'KeyM') { e.preventDefault(); openPhone(); }
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
@@ -922,7 +943,9 @@ function updateDay(dt) {
 /* =====================================================================
    PANTALLAS: modal genérico, resumen, preparación
    ===================================================================== */
-let modalResolve = null;
+let modalResolve = null, walking = false;
+function endWalk() { if (!walking) return; walking = false; if (document.exitPointerLock) document.exitPointerLock(); prepScreen(); }
+$('#btnDay').onclick = endWalk;
 function modal(html, buttons = [{ label: 'Vale', cls: 'pri', value: true }], onMount) {
   return new Promise(res => {
     if (document.exitPointerLock) document.exitPointerLock();
@@ -988,12 +1011,14 @@ async function prepScreen() {
   const v = await modal(html, [
     ...btns,
     { label: '📱 Móvil', cls: 'azul', value: 'phone' },
+    { label: '🚶 Pasear', value: 'walk' },
     { label: '😴 Cerrar hoy', value: 'rest' },
     { label: '🔓 Abrir el local', cls: 'pri', value: 'open', disabled: !canOpen },
   ]);
   if (v === 'phone') { openPhone(() => prepScreen()); return; }
   if (v === 'rest') { toast('Hoy cerrado por descanso. El papeleo no descansa.', 'info'); return nextDay(); }
   if (v === 'open') return startService();
+  if (v === 'walk') { walking = true; lockPointer(); return; }
   if (typeof v === 'function') return v();
   prepScreen();
 }
@@ -1073,6 +1098,7 @@ function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   const pausedByLock = Day.running && !isTouch && !locked() && !uiBlocking();
   $('#pausa').classList.toggle('hidden', !pausedByLock);
+  $('#btnDay').classList.toggle('hidden', !walking || uiBlocking());
   const paused = uiBlocking() || pausedByLock;
   if (!paused) {
     // movimiento
@@ -1098,6 +1124,270 @@ function frame(now) {
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
+
+
+/* =====================================================================
+   FASE 0 · TRÁMITES DE APERTURA
+   ===================================================================== */
+/* Motor de formularios: cada campo puede tener `ok` (función o valor) y `err` (motivo de rechazo). */
+const TRAMITES = [
+  { id: 'm036', icon: '🏛', org: 'Agencia Tributaria · Sede electrónica', short: 'Hacienda', name: 'Alta censal · Modelo 036', canal: 'online', prereq: [],
+    intro: 'Declaración censal de alta en el Censo de Empresarios, Profesionales y Retenedores.',
+    fields: [
+      { id: 'nif', label: 'NIF del titular', help: 'Tu DNI: 48291034 (la letra se borró en la lavadora). La letra es el resto de dividir entre 23... o eso dicen.', type: 'select',
+        options: [['48291034', '48291034 (sin letra)'], ['48291034G', '48291034G'], ['B12345678', 'B12345678'], ['48291034Ñ', '48291034Ñ']],
+        ok: '48291034G', err: v => v === 'B12345678' ? 'Eso es el NIF de una sociedad limitada. Usted es un humilde autónomo.' : v === '48291034' ? 'Falta la letra del NIF. Sin letra no hay paraíso fiscal ni del otro.' : 'La letra del NIF no cuadra. 48291034 entre 23 da resto 8: letra G.' },
+      { id: 'cas', label: 'Causa de presentación', type: 'radio',
+        options: [['111', '<span class="casilla">111</span> Solicitud de alta en el censo'], ['122', '<span class="casilla">122</span> Modificación de domicilio'], ['150', '<span class="casilla">150</span> Baja en el censo']],
+        ok: '111', err: v => v === '150' ? '¿Se da de baja antes de darse de alta? Ambicioso.' : 'Usted no modifica nada: es un alta. Casilla 111.' },
+      { id: 'iae', label: 'Epígrafe del IAE', help: 'Hamburguesería con mesas y servicio a la mesa.', type: 'select',
+        options: [['', '— Seleccione —'], ['672.1', '672.1 · Cafeterías de tres tazas'], ['673.2', '673.2 · Otros cafés y bares'], ['671.5', '671.5 · Restaurantes de un tenedor'], ['911', '911 · Servicios forestales y de guardería']],
+        ok: '671.5', err: v => v === '672.1' ? 'Usted no tiene tazas, tiene tenedores. Epígrafe equivocado.' : v === '673.2' ? 'Eso es un bar. Usted sirve comidas: es restaurante.' : v === '911' ? 'Guardería forestal. ¿Va a cuidar pinos o a freír hamburguesas?' : 'Sin epígrafe no hay actividad.' },
+      { id: 'ten', label: 'Número de tenedores del establecimiento', help: 'Dato absolutamente imprescindible.', type: 'select',
+        options: [['0', '0 (comemos con la mano)'], ['1', '1 tenedor'], ['3', '3 tenedores'], ['5', '5 tenedores y una cuchara']],
+        ok: (v, a) => (a.iae !== '671.5') || v === '1', err: 'El epígrafe dice «un tenedor» y declara usted otra cifra. Incoherencia cubertera.' },
+      { id: 'iva', label: 'Régimen de IVA', type: 'select',
+        options: [['', '— Seleccione —'], ['gen', 'Régimen general'], ['req', 'Recargo de equivalencia'], ['rav', 'Régimen especial de agencias de viajes']],
+        ok: 'gen', err: v => v === 'req' ? 'El recargo de equivalencia es para comercio minorista que no transforma. Usted transforma carne en felicidad.' : v === 'rav' ? '¿Vende usted viajes? ¿Al baño?' : 'Elija un régimen de IVA. Todos tributan.' },
+      { id: 'irpf', label: 'Método de estimación en IRPF', type: 'select',
+        options: [['', '— Seleccione —'], ['eds', 'Estimación directa simplificada'], ['edn', 'Estimación directa normal'], ['ojo', 'Estimación a ojo de buen cubero']],
+        ok: 'eds', err: v => v === 'edn' ? 'La normal es obligatoria si factura más de 600.000 €. Ojalá. Le corresponde la simplificada.' : v === 'ojo' ? 'Ese método lo usa Hacienda, no usted.' : 'Elija método de estimación.' },
+      { id: 'fecha', label: 'Fecha de inicio de la actividad', type: 'radio',
+        options: [['hoy', 'Hoy'], ['ayer', 'Ayer, con efectos retroactivos'], ['nunca', 'Cuando abra, si abro']],
+        ok: 'hoy', err: 'La fecha de inicio debe ser la real. Ni retroactivos ni existencialismo.' },
+      { id: 'inspec', label: 'Color favorito del inspector que le toque', type: 'text', help: 'Opcional, pero se valora.' },
+      { id: 'ley', label: 'Declaración', type: 'check', text: 'He leído y comprendido íntegramente la Ley 58/2003 General Tributaria y sus 9.000 modificaciones',
+        ok: true, err: 'Debe declarar que se ha leído la Ley General Tributaria. Nadie lo ha hecho, pero hay que marcarlo.' },
+    ] },
+  { id: 'reta', icon: '👷', org: 'Tesorería General de la Seguridad Social · Importass', short: 'Seg. Social', name: 'Alta en el RETA (autónomos)', canal: 'online', prereq: ['m036'],
+    intro: 'Alta en el Régimen Especial de Trabajadores Autónomos.',
+    fields: [
+      { id: 'alta', label: 'Fecha de efectos del alta', type: 'radio',
+        options: [['ini', 'El mismo día de inicio de la actividad'], ['gane', 'Cuando empiece a ganar dinero'], ['prueba', 'Tras un periodo de prueba de 6 meses, a ver qué tal']],
+        ok: 'ini', err: v => v === 'gane' ? 'Eso pensaban todos. Se cotiza desde el primer día, gane o pierda.' : 'Los autónomos no tienen periodo de prueba. Ni vacaciones. Ni...' },
+      { id: 'cnae', label: 'Actividad económica (CNAE-2009)', type: 'select',
+        options: [['', '— Seleccione —'], ['5630', '5630 · Establecimientos de bebidas'], ['5610', '5610 · Restaurantes y puestos de comidas'], ['0113', '0113 · Cultivo de hortalizas, raíces y tubérculos']],
+        ok: '5610', err: v => v === '0113' ? '¿Va a cultivar usted las patatas? El CNAE es 5610.' : v === '5630' ? 'Usted da de comer, no solo de beber. 5610.' : 'Elija la actividad.' },
+      { id: 'rend', label: 'Previsión de rendimientos netos mensuales', help: 'Determina su tramo de cotización. Sea optimista, pero no mucho.', type: 'select',
+        options: [['t1', 'Hasta 670 € (tramo 1)'], ['t5', 'De 1.166 a 1.300 € (tramo 5)'], ['t15', 'Más de 6.000 € (tramo 15, ilusión)']] },
+      { id: 'tp', label: 'Cuota reducida para nuevos autónomos', type: 'radio',
+        options: [['si', 'Solicito la cuota reducida de 80 €/mes'], ['no', 'No, gracias, me sobra el dinero']] },
+      { id: 'mutua', label: 'Mutua colaboradora', type: 'select',
+        options: [['a', 'Mutua La Solidaria'], ['b', 'Mutua Los Tres Sellos'], ['c', 'Mutua Mi Primo (sin ánimo de lucro, ni de nada)']] },
+      { id: 'iban', label: 'Domiciliación de la cuota', type: 'select',
+        options: [['', '— Seleccione —'], ['es', 'ES91 2100 0418 4502 0005 1332 (cuenta del negocio)'], ['cash', 'Pagaré en monedas en la ventanilla'], ['bizum', 'Bizum al director provincial']],
+        ok: 'es', err: v => v === 'cash' ? 'La Seguridad Social no acepta monedas, ni de chocolate.' : v === 'bizum' ? 'Eso podría considerarse cohecho. Simpático, pero cohecho.' : 'Indique una cuenta de domiciliación.' },
+    ] },
+  { id: 'licencia', icon: '🏢', org: 'Ajuntament de Cala Tramita · Urbanismo y Actividades', short: 'Ayuntamiento', name: 'Licencia / declaración responsable de actividad', canal: 'presencial', prereq: ['m036'], tasa: 312.47,
+    intro: 'Local de 80 m² (sala de público: 60 m²). Actividad: restaurante con cocina y plancha.',
+    fields: [
+      { id: 'tipo', label: 'Procedimiento', type: 'radio',
+        options: [['dr', 'Declaración responsable sin proyecto'], ['drp', 'Declaración responsable + proyecto técnico firmado por técnico competente'], ['taxi', 'Licencia de taxi']],
+        ok: 'drp', err: v => v === 'taxi' ? 'Ventanilla equivocada. Y municipio equivocado: aquí hay dos taxis y no caben más.' : 'Con cocina y plancha necesita proyecto técnico. ¿La grasa a dónde va? ¿Al balcón del vecino del primero?' },
+      { id: 'aforo', label: 'Aforo máximo de la sala (personas)', help: 'Sala de público de 60 m². Densidad de ocupación: 1,5 m² por persona.', type: 'num',
+        ok: v => v >= 1 && v <= 40, err: v => v > 40 ? `¿${v} personas en 60 m²? Eso no es un restaurante, es el metro en hora punta. Máximo 40.` : 'El aforo debe ser al menos de una persona. Usted, por ejemplo.' },
+      { id: 'humos', label: 'Evacuación de humos de la plancha', type: 'select',
+        options: [['', '— Seleccione —'], ['cub', 'Chimenea a cubierta con filtros homologados'], ['ven', 'Por la ventana, que da a un patio'], ['pie', 'Ventilador de pie de 19,99 €']],
+        ok: 'cub', err: v => v === 'pie' ? 'El ventilador de pie no es un sistema de extracción, por mucho que lo ponga en el número 3.' : 'Los humos, a cubierta. La ordenanza municipal no admite «por la ventana».' },
+      { id: 'zas', label: '¿Está el local en Zona Acústicamente Saturada?', type: 'radio', options: [['no', 'No'], ['nose', 'No lo sé'], ['que', '¿Eso qué es?']] },
+      { id: 'abuela', label: 'Nombre de soltera de la abuela materna del arquitecto', type: 'text', help: 'Campo obligatorio según la Ordenanza de 1987.', ok: v => v.trim().length > 1, err: 'Falta el nombre de soltera de la abuela del arquitecto. Sin eso no podemos continuar.' },
+      { id: 'tasa', label: 'Tasa municipal', type: 'check', text: 'Adjunto justificante de pago de la tasa por actividad (312,47 €)', ok: true, err: 'Falta el justificante de pago de la tasa. El Ayuntamiento cobra antes de leer.' },
+    ] },
+  { id: 'sanidad', icon: '🧑‍🍳', org: 'Conselleria de Sanidad · Salud Pública', short: 'Sanidad', name: 'Manipulador de alimentos y registro sanitario', canal: 'presencial', prereq: [], tasa: 35,
+    intro: 'Curso de manipulador de alimentos (35 €, examen final) y comunicación al registro sanitario.',
+    fields: [
+      { id: 't', label: 'Examen · ¿Temperatura mínima en el centro de una hamburguesa?', type: 'radio',
+        options: [['40', '40 °C'], ['70', '70 °C o más'], ['ojo', 'La que salga, se nota por el color']], ok: '70', err: 'Examen suspendido: la carne picada debe alcanzar al menos 70 °C en el centro.' },
+      { id: 'f', label: 'Examen · ¿Temperatura de la cámara de carne fresca?', type: 'radio',
+        options: [['04', 'Entre 0 y 4 °C'], ['1015', 'Entre 10 y 15 °C'], ['amb', 'Ambiente mediterráneo, unos 28 °C']], ok: '04', err: 'Examen suspendido: refrigeración entre 0 y 4 °C.' },
+      { id: 'x', label: 'Examen · Carne cruda y lechuga, ¿misma tabla de cortar?', type: 'radio',
+        options: [['si', 'Sí, así la lechuga coge sabor'], ['no', 'No: tablas y utensilios separados (contaminación cruzada)']], ok: 'no', err: 'Examen suspendido: ¡contaminación cruzada!' },
+      { id: 'reg', label: 'Registro donde inscribe el establecimiento', type: 'select',
+        options: [['', '— Seleccione —'], ['rgseaa', 'RGSEAA (Registro General Sanitario de Empresas Alimentarias, estatal)'], ['auto', 'Registro sanitario autonómico · comunicación previa (comercio minorista de comidas)'], ['prop', 'Registro de la Propiedad']],
+        ok: 'auto', err: v => v === 'rgseaa' ? 'El RGSEAA es para industrias y distribuidores. Un restaurante va al registro autonómico.' : v === 'prop' ? 'Su hamburguesería no es una finca. Todavía.' : 'Elija un registro.' },
+      { id: 'appcc', label: 'Autocontrol', type: 'check', text: 'Dispongo de plan de autocontrol (APPCC) y guía de prácticas correctas de higiene', ok: true, err: 'Sin plan de autocontrol no hay registro. Y sin registro no hay hamburguesas.' },
+    ] },
+  { id: 'hojas', icon: '📋', org: 'Servicio Territorial de Consumo', short: 'Consumo', name: 'Hojas de reclamaciones y cartel obligatorio', canal: 'presencial', prereq: ['licencia'],
+    intro: 'Obtención de hojas oficiales de reclamaciones y cartel anunciador.',
+    fields: [
+      { id: 'donde', label: 'Ubicación del cartel «Existen hojas de reclamaciones a disposición de las personas consumidoras»', type: 'select',
+        options: [['', '— Seleccione —'], ['vis', 'En lugar visible de la zona de atención al público'], ['wc', 'En el baño del personal'], ['cong', 'Dentro del congelador, por si acaso']],
+        ok: 'vis', err: v => v === 'cong' ? 'El cartel debe ser visible. En el congelador solo lo verá el pollo.' : 'El cartel tiene que estar a la vista del público.' },
+      { id: 'lang', label: 'Idioma del cartel', type: 'select',
+        options: [['', '— Seleccione —'], ['en', 'Solo inglés, que aquí todo son guiris'], ['cv', 'Castellano y valenciano (lenguas oficiales)'], ['eo', 'Esperanto']],
+        ok: 'cv', err: 'El cartel debe estar en las lenguas oficiales de la comunidad: castellano y valenciano.' },
+      { id: 'precios', label: 'Lista de precios', type: 'radio',
+        options: [['si', 'Visible y con IVA incluido'], ['no', 'Sin IVA, que así parece más barato']], ok: 'si', err: 'Los precios al consumidor se anuncian con IVA incluido. Siempre.' },
+      { id: 'n', label: 'Juegos de hojas solicitados', type: 'num', ok: v => v >= 1, err: 'Debe tener al menos un juego de hojas. Aunque no vaya a necesitarlas, claro.' },
+      { id: 'motivo', label: 'Motivo por el que espera no necesitarlas', type: 'text', help: 'Opcional. Se archivará con cariño.' },
+    ] },
+];
+const tramiteById = id => TRAMITES.find(t => t.id === id);
+const tramiteOk = id => !!(S.tramites[id] && S.tramites[id].ok);
+
+function fieldHtml(f) {
+  const nm = 'f_' + f.id;
+  let inner = '';
+  if (f.type === 'select') inner = `<select name="${nm}">${f.options.map(o => `<option value="${esc(o[0])}">${o[1]}</option>`).join('')}</select>`;
+  else if (f.type === 'radio') inner = f.options.map(o => `<label class="opt"><input type="radio" name="${nm}" value="${esc(o[0])}">${o[1]}</label>`).join('');
+  else if (f.type === 'check') inner = `<label class="opt"><input type="checkbox" name="${nm}">${f.text}</label>`;
+  else if (f.type === 'num') inner = `<input type="number" name="${nm}" min="0" step="1">`;
+  else inner = `<input type="text" name="${nm}" maxlength="60" autocomplete="off">`;
+  return `<div class="fld"><span class="lab">${f.label}</span>${f.help ? `<div class="help">${f.help}</div>` : ''}${inner}</div>`;
+}
+function readForm(card, fields) {
+  const v = {};
+  for (const f of fields) {
+    const nm = 'f_' + f.id;
+    if (f.type === 'radio') { const r = card.querySelector(`input[name="${nm}"]:checked`); v[f.id] = r ? r.value : ''; }
+    else if (f.type === 'check') v[f.id] = card.querySelector(`input[name="${nm}"]`).checked;
+    else if (f.type === 'num') v[f.id] = Number(card.querySelector(`input[name="${nm}"]`).value || 0);
+    else v[f.id] = card.querySelector(`[name="${nm}"]`).value;
+  }
+  return v;
+}
+function validate(fields, v) {
+  const errs = [];
+  for (const f of fields) {
+    if (f.ok === undefined) continue;
+    const good = typeof f.ok === 'function' ? f.ok(v[f.id], v) : v[f.id] === f.ok;
+    if (!good) errs.push(typeof f.err === 'function' ? f.err(v[f.id], v) : f.err);
+  }
+  return errs;
+}
+/* rellena un formulario y devuelve {values, errs} o null si se abandona */
+async function fillForm({ org, title, intro, fields, submit = 'Presentar', extra = '' }) {
+  let res = null;
+  const v = await modal(`<div class="paper"><div class="org"><span>${org}</span><span>Ejemplar para la Administración</span></div>
+    <h3>${title}</h3>${intro ? `<p class="muted">${intro}</p>` : ''}${extra}${fields.map(fieldHtml).join('')}</div>`,
+    [{ label: 'Abandonar', cls: 'mal', value: 'back' }, { label: '✒️ ' + submit, cls: 'pri', value: 'ok' }],
+    card => { const b = card.querySelectorAll('.btns .btn')[1]; b.addEventListener('click', () => { res = readForm(card, fields); }, true); });
+  if (v !== 'ok') return null;
+  return { values: res, errs: validate(fields, res) };
+}
+async function stampResult(ok, title, lines, okText = 'REGISTRADO', noText = 'DENEGADO') {
+  SFX.stamp();
+  await modal(`<div class="paper" style="min-height:160px"><div class="org"><span>Resolución</span><span>${fshort(S.day)}</span></div><h3>${title}</h3>
+    ${lines.map(l => `<p>${l}</p>`).join('')}<div class="stamp ${ok ? 'ok' : 'no'}">${ok ? okText : noText}</div></div>`,
+    [{ label: ok ? '¡Bien!' : 'Suspiro...', cls: ok ? 'ok' : 'mal', value: true }]);
+}
+
+/* sede electrónica: certificado digital y caídas */
+async function sedeElectronica(org) {
+  if (S.flags.sedeCaida === S.day) { await modal(`<h2>🖥️ ${org}</h2><p><b>Error 503.</b> La sede electrónica no está disponible hoy por «tareas de mantenimiento programadas» que nadie programó.</p><p class="muted">Inténtelo mañana. El plazo, eso sí, no se mueve.</p>`); return false; }
+  if (S.cert.validUntil < S.day) {
+    const v = await modal(`<h2>🔐 Certificado caducado</h2><p>La sede dice: <i>«No se ha encontrado ningún certificado válido. Su certificado de la FNMT caducó el ${fshort(S.cert.validUntil)}.»</i></p>
+      <p class="muted">Opciones: renovarlo (acreditar identidad en una oficina: se te va el día) o probar suerte con Cl@ve PIN.</p>`,
+      [{ label: 'Volver', value: 'back' }, { label: '📲 Cl@ve PIN', cls: 'azul', value: 'clave' }, { label: '🏢 Renovar en oficina', cls: 'pri', value: 'ofi' }]);
+    if (v === 'ofi') {
+      S.cert.validUntil = S.day + 45; addXp(10);
+      await modal(`<h2>🏢 Oficina de acreditación</h2><p>Tras dos horas de cola, una foto que no te favorece y la frase «el sistema va lento hoy», tienes certificado nuevo, válido hasta el <b>${fshort(S.cert.validUntil)}</b>.</p><p>Se te ha ido el día entero.</p>`);
+      nextDay(); return null;
+    }
+    if (v === 'clave') {
+      if (Math.random() < .5) { await modal('<h2>📵 Cl@ve PIN</h2><p>El SMS con el PIN llega once minutos después. Validez del PIN: diez minutos.</p><p class="muted">Vuelve a intentarlo otro rato.</p>'); return false; }
+      toast('📲 Cl@ve PIN aceptado. Por esta vez.', 'good');
+    } else return false;
+  }
+  if (Math.random() < .12) await modal(`<h2>🖥️ ${org}</h2><p>«Su navegador no es compatible. Se recomienda Internet Explorer 6 con la máquina virtual de Java 1.4.2 y AutoFirma versión 1.6.5 (no la 1.6.6).»</p><p class="muted">Pulsas F5 tres veces y, milagrosamente, carga.</p>`, [{ label: 'Seguir', cls: 'pri', value: true }]);
+  return true;
+}
+/* ventanilla presencial: cita previa, cola con número y "vuelva usted mañana" */
+async function ventanilla(org) {
+  if (Math.random() < .3) await modal(`<h2>📞 Cita previa · ${org}</h2><p>«No hay citas disponibles en los próximos 47 días. Pruebe a las 00:00 del jueves.»</p><p class="muted">Decides plantarte a primera hora con un termo de café.</p>`, [{ label: 'Ir sin cita', cls: 'pri', value: true }]);
+  const mine = rint(40, 70); let cur = mine - rint(9, 15);
+  await modal(`<h2>🎫 ${org}</h2><p>Tu número: <b class="big">A-${String(mine).padStart(3, '0')}</b></p><div class="pantalla" id="qScr">A-${String(cur).padStart(3, '0')}</div><p id="qMsg" class="muted">Hay 4 ventanillas. Abiertas: 1.</p>`, [],
+    async card => {
+      const scr = card.querySelector('#qScr'), msg = card.querySelector('#qMsg');
+      const frases = ['Un señor se cuela: «solo venía a preguntar una cosa».', 'La pantalla salta al B-012. Nadie sabe por qué.', 'Alguien pregunta si aquí se renueva el DNI. No.', 'Cambio de turno. Se cierra la ventanilla 2.', 'Lees el tablón: «Prohibido usar el móvil». Usas el móvil.'];
+      while (cur < mine) { await sleep(rint(160, 300)); cur++; scr.textContent = 'A-' + String(cur).padStart(3, '0'); SFX.pick(); if (Math.random() < .2) { msg.textContent = pick(frases); await sleep(650); } }
+      msg.innerHTML = '<b>¡Su turno! Ventanilla 3.</b>'; SFX.bell(); await sleep(700); closeModal(true);
+    });
+  if (Math.random() < .14) {
+    await modal(`<h2>🚪 Ventanilla 3 · CERRADA</h2><p>Un cartel escrito a boli: <b>«Salgo a desayunar. Vuelvo en 5 min.»</b></p><p>Esperas dos horas. Nadie vuelve. Un conserje te dice: <i>«Vuelva usted mañana»</i>.</p>`, [{ label: 'Volver mañana 😩', cls: 'mal', value: true }]);
+    addXp(5); nextDay(); return null;
+  }
+  return true;
+}
+
+async function runTramite(id) {
+  const t = tramiteById(id);
+  if (tramiteOk(id)) { toast('Ese trámite ya está hecho. No tientes a la suerte.', 'info'); return prepScreen(); }
+  const miss = t.prereq.filter(p => !tramiteOk(p));
+  if (miss.length) {
+    await modal(`<h2>${t.icon} ${t.org}</h2><p>«Para este trámite necesita primero: <b>${miss.map(m => tramiteById(m).name).join(', ')}</b>. Vuelva usted cuando lo tenga.»</p>`);
+    if (t.canal === 'presencial') { await modal('<p>Te has enterado después de la cola, claro. Día perdido.</p>'); return nextDay(); }
+    return prepScreen();
+  }
+  const pass = t.canal === 'online' ? await sedeElectronica(t.org) : await ventanilla(t.org);
+  if (pass === null) return; // el día ya se ha consumido
+  if (!pass) return prepScreen();
+  const r = await fillForm({ org: t.org, title: t.name, intro: t.intro, fields: t.fields, submit: t.canal === 'online' ? 'Firmar y enviar' : 'Entregar en ventanilla' });
+  if (!r) { if (t.canal === 'presencial') { toast('Te vas sin entregar nada. Mañana, otra cola.', 'warn'); return nextDay(); } return prepScreen(); }
+  if (t.tasa) money(-t.tasa, `Tasa · ${t.name}`);
+  const st = S.tramites[id] || (S.tramites[id] = { ok: false, intentos: 0 }); st.intentos++;
+  if (r.errs.length) {
+    addXp(5);
+    await stampResult(false, t.name, [`Defectos observados:`, ...r.errs.slice(0, 3).map(e => '• ' + e), r.errs.length > 3 ? `• ...y ${r.errs.length - 3} defectos más.` : '', '<i>Subsane y vuelva a presentar. Se le ha ido el día.</i>']);
+    return nextDay();
+  }
+  st.ok = true; addXp(40);
+  if (id === 'reta') { S.reta.alta = true; S.reta.tarifaPlana = r.values.tp === 'si'; }
+  await stampResult(true, t.name, [pick(['Su solicitud ha sido registrada con éxito.', 'Expediente conforme. Que no se acostumbre.', 'Todo correcto. El funcionario sonríe. Inquietante.']), `Nº de registro: ${rint(1000, 9999)}/2026/${rint(100, 999)}`]);
+  if (TRAMITES.every(x => tramiteOk(x.id))) {
+    S.open = true; addXp(60); applyUpgrades();
+    await modal(`<h2>🎉 ¡Ya puedes abrir!</h2><p>Con cinco trámites, ${Object.values(S.tramites).reduce((a, x) => a + x.intentos, 0)} intentos y ${S.day} días de tu vida, <b>Burger Cala Tramita</b> tiene permiso para existir.</p>
+      <p class="muted">Consejo: mañana, cuando abras, la gente vendrá con hambre. Y Hacienda, con calendario.</p>`, [{ label: '¡A cocinar!', cls: 'pri', value: true }]);
+  }
+  return nextDay();
+}
+async function tramitesMenu() {
+  const rows = TRAMITES.map(t => {
+    const ok = tramiteOk(t.id), n = S.tramites[t.id] ? S.tramites[t.id].intentos : 0;
+    return `<div class="item"><div><b>${t.icon} ${t.name}</b><div class="muted">${t.short} · ${t.canal === 'online' ? '🖥️ online' : '🏢 presencial'}${n ? ` · ${n} intento(s)` : ''}</div></div>
+      ${ok ? '<span class="tag ok">REGISTRADO</span>' : `<button class="btn pri" data-t="${t.id}">Ir</button>`}</div>`;
+  }).join('');
+  let pickId = null;
+  const v = await modal(`<h2>🏛 Trámites de apertura</h2><p class="muted">Cada intento te ocupa el día. Certificado digital válido hasta: <b>${fshort(S.cert.validUntil)}</b>.</p><div class="tlist">${rows}</div>`,
+    [{ label: 'Volver', value: 'back' }],
+    card => card.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { pickId = b.dataset.t; closeModal('go'); }));
+  if (v === 'go') return runTramite(pickId);
+  return prepScreen();
+}
+
+window.introFase0 = () => modal(`<h2>📜 Bienvenido a Cala Tramita</h2>
+  <p>Has firmado el alquiler de un local en primera línea de playa. Tienes ${eur(6000)} de ahorros, una plancha y una ilusión.</p>
+  <p>Antes de servir la primera hamburguesa necesitas:</p>
+  <ol>${TRAMITES.map(t => `<li>${t.icon} ${t.name} <span class="muted">(${t.short})</span></li>`).join('')}</ol>
+  <p class="muted">Cada trámite te ocupa un día. Si te equivocas en un dato, se rechaza y pierdes el día. Mientras tanto puedes pasear por tu local vacío y soñar.</p>`,
+  [{ label: 'Coger el DNI y salir', cls: 'pri', value: true }]);
+
+Hooks.prep.push(() => {
+  if (S.open) return null;
+  const done = TRAMITES.filter(t => tramiteOk(t.id)).length;
+  return { html: `<div class="item"><h4>🔒 Local cerrado por trámites <span class="tag pend">${done}/${TRAMITES.length}</span></h4>
+    ${TRAMITES.map(t => `<div>${tramiteOk(t.id) ? '✅' : '⬜'} ${t.name}</div>`).join('')}</div>`,
+    buttons: [{ label: '🏛 Hacer trámites', cls: 'ok', value: () => tramitesMenu() }] };
+});
+Hooks.apply.push(() => {
+  scene.userData.hojas.visible = tramiteOk('hojas');
+  if (S.open && !scene.userData.licOk) {
+    scene.remove(scene.userData.licencia);
+    const s = textSprite('LICENCIA Nº 2026/0471 ✔', { bg: '#c9f2d6', h: .28, font: 'bold 30px Courier New' }); s.position.set(-7.7, 1.9, 2.5); scene.add(s);
+    scene.userData.licOk = true;
+  }
+});
+registerApp({ id: 'tramites', icon: '🏛', name: 'Trámites', color: '#ffcd3c',
+  badge: () => (S.open ? 0 : TRAMITES.filter(t => !tramiteOk(t.id)).length) + (window.pendingObligations ? window.pendingObligations() : 0),
+  render(c) {
+    let h = '';
+    if (window.renderObligations) h += window.renderObligations();
+    h += '<h4>Apertura del local</h4>' + TRAMITES.map(t => `<div class="item"><h4><span>${t.icon} ${t.name}</span>${tramiteOk(t.id) ? '<span class="tag ok">OK</span>' : '<span class="tag pend">PENDIENTE</span>'}</h4><div class="muted">${t.org}</div></div>`).join('');
+    h += `<div class="item"><h4>🔐 Certificado digital FNMT</h4><div class="muted">Válido hasta el ${fshort(S.cert.validUntil)}${S.cert.validUntil < S.day ? ' · <b class="negt">CADUCADO</b>' : ''}</div></div>`;
+    if (!S.open) h += '<p class="muted">Los trámites de apertura se hacen por la mañana, desde la pantalla de inicio del día.</p>';
+    c.innerHTML = h;
+    if (window.bindObligations) window.bindObligations(c);
+  } });
 
 /* ==== FASES SIGUIENTES ==== */
 
