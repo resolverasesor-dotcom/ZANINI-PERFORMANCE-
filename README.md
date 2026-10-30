@@ -327,3 +327,15 @@ misma que usan las pruebas automáticas.
 
 Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart) y `?speed=4`
 (acelera la simulación).
+
+---
+
+# GRAN THEFT BUROCRAZY (`burocrazy/`)
+
+Juego independiente en primera persona: sátira de la burocracia española. Un único
+archivo `burocrazy/index.html` (Three.js desde CDN). Basta con abrirlo en el navegador
+o servir la carpeta con cualquier servidor estático. Guarda la partida en `localStorage`.
+
+Controles: **WASD + ratón** (clic para capturar el ratón), **E / clic** para interactuar,
+**Tab / M** para el móvil del personaje. En móvil: joystick virtual, arrastrar a la
+derecha para mirar, botones **ACCIÓN** y **📱**.

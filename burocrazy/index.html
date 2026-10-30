@@ -1,0 +1,1121 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>GRAN THEFT BUROCRAZY</title>
+<style>
+:root{
+  --mar:#1d7fbf; --mar2:#0f4f7d; --teja:#e2724b; --sol:#ffcd3c; --cal:#fffaf0;
+  --tinta:#23201c; --verde:#3aa66a; --rojo:#d8433a; --papel:#fbf6e6; --sello:#c8322b;
+  --sombra:0 6px 0 rgba(0,0,0,.25);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#9fd8f0;font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif;color:var(--tinta);
+  -webkit-user-select:none;user-select:none;touch-action:none}
+canvas{display:block}
+button{font:inherit;cursor:pointer}
+.hidden{display:none!important}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;z-index:5}
+#topbar{position:absolute;top:10px;left:10px;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 280px)}
+.chip{background:rgba(255,250,240,.92);border:3px solid var(--tinta);border-radius:12px;padding:5px 10px;font-weight:bold;font-size:15px;box-shadow:var(--sombra);white-space:nowrap}
+.chip.money{background:var(--sol)}
+.chip.neg{background:#ffb3a8}
+#tickets{position:absolute;top:10px;right:10px;width:250px;display:flex;flex-direction:column;gap:6px;max-height:70vh;overflow:hidden}
+.ticket{background:#fff;border:3px solid var(--tinta);border-radius:6px 6px 14px 14px;padding:6px 8px;font-size:14px;box-shadow:var(--sombra);position:relative}
+.ticket h4{margin:0 0 3px;font-size:13px;display:flex;justify-content:space-between}
+.ticket .ings{font-size:17px;letter-spacing:1px;line-height:1.25}
+.ticket .bar{height:6px;background:#ddd;border-radius:3px;margin-top:4px;overflow:hidden}
+.ticket .bar i{display:block;height:100%;background:var(--verde)}
+.ticket.vip{border-color:#a02bd6;background:#f6e9ff}
+.ticket .who{font-size:11px;color:#555}
+#cross{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
+#hint{position:absolute;left:50%;top:calc(50% + 22px);transform:translateX(-50%);background:rgba(35,32,28,.82);color:#fff;padding:4px 10px;border-radius:8px;font-size:15px;white-space:nowrap}
+#hand{position:absolute;left:10px;bottom:10px;background:rgba(255,250,240,.92);border:3px solid var(--tinta);border-radius:12px;padding:6px 10px;font-weight:bold;box-shadow:var(--sombra);font-size:15px}
+#toasts{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:min(560px,94vw)}
+.toast{background:var(--cal);border:3px solid var(--tinta);border-radius:12px;padding:7px 12px;font-size:15px;box-shadow:var(--sombra);animation:pop .25s ease-out;text-align:center}
+.toast.good{background:#c9f2d6}.toast.bad{background:#ffd0c8}.toast.info{background:#d6ecff}.toast.warn{background:#fff0b3}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+#pausa{position:fixed;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;background:rgba(15,40,60,.45);color:#fff;font-size:26px;font-weight:bold;text-shadow:0 3px 0 #000;text-align:center;pointer-events:none}
+
+/* ---------- controles táctiles ---------- */
+#touch{position:fixed;inset:0;z-index:6;pointer-events:none}
+#stick{position:absolute;left:24px;bottom:24px;width:130px;height:130px;border-radius:50%;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.6);pointer-events:auto}
+#stick i{position:absolute;left:40px;top:40px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.75)}
+#lookpad{position:absolute;right:0;top:0;width:55%;height:100%;pointer-events:auto}
+.tbtn{position:absolute;pointer-events:auto;width:78px;height:78px;border-radius:50%;border:3px solid var(--tinta);background:var(--sol);font-weight:bold;font-size:16px;box-shadow:var(--sombra)}
+#btnAct{right:26px;bottom:40px}
+#btnPhone{right:118px;bottom:24px;width:60px;height:60px;background:#fff;font-size:26px}
+
+/* ---------- pantallas / modales ---------- */
+.overlay{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:rgba(15,40,60,.55);padding:12px}
+.card{background:var(--cal);border:4px solid var(--tinta);border-radius:18px;box-shadow:0 10px 0 rgba(0,0,0,.3);max-width:640px;width:100%;max-height:92vh;overflow:auto;padding:18px 20px;-webkit-user-select:text;user-select:text}
+.card h2{margin:0 0 8px;font-size:24px}
+.card h3{margin:14px 0 6px}
+.card p{margin:6px 0;line-height:1.4}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end}
+.btn{border:3px solid var(--tinta);border-radius:12px;padding:9px 16px;font-weight:bold;background:#fff;box-shadow:0 4px 0 rgba(0,0,0,.3);font-size:16px}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.btn.pri{background:var(--sol)}.btn.ok{background:#8fe0a8}.btn.mal{background:#ff9d8f}.btn.azul{background:#9fd3ff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+table.res{width:100%;border-collapse:collapse;font-size:15px}
+table.res td{padding:4px 6px;border-bottom:1px dashed #bbb}
+table.res td:last-child{text-align:right;font-weight:bold;white-space:nowrap}
+table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-size:17px}
+.pos{color:#1d7a43}.negt{color:#b3261e}
+.muted{color:#6b645a;font-size:14px}
+
+/* título */
+#title{background:linear-gradient(#5cc3f2 0%,#9fe0ff 55%,#f7d89a 56%,#f2c77a 100%)}
+#title .card{text-align:center;max-width:560px}
+.logo{display:inline-block;margin:6px 0 4px;padding:10px 18px;border:6px solid var(--sello);color:var(--sello);border-radius:10px;transform:rotate(-4deg);
+  font-family:Impact,"Arial Black",sans-serif;font-size:clamp(28px,7vw,48px);line-height:.95;letter-spacing:1px;background:rgba(255,255,255,.6);
+  box-shadow:inset 0 0 0 3px rgba(200,50,43,.35)}
+.logo small{display:block;font-size:.42em;letter-spacing:5px}
+.sub{font-style:italic;margin:10px 0 14px}
+.keys{font-size:14px;text-align:left;background:#fff;border:2px dashed #999;border-radius:10px;padding:8px 12px;margin-top:12px}
+.keys b{display:inline-block;min-width:68px}
+
+/* móvil del personaje */
+#phone{position:fixed;inset:0;z-index:18;display:flex;align-items:center;justify-content:center;background:rgba(15,40,60,.5)}
+#phone .dev{width:min(400px,96vw);height:min(760px,94vh);background:#222;border-radius:38px;padding:14px 12px;box-shadow:0 12px 0 rgba(0,0,0,.35);display:flex;flex-direction:column}
+#phone .scr{flex:1;background:linear-gradient(160deg,#ffe8b8,#9fd3ff);border-radius:26px;overflow:hidden;display:flex;flex-direction:column}
+#phone .sbar{display:flex;justify-content:space-between;padding:8px 18px 4px;font-size:13px;font-weight:bold}
+#phone .body{flex:1;overflow:auto;padding:8px 14px 14px;-webkit-user-select:text;user-select:text}
+#phone .apps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:10px 4px}
+#phone .app{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:none;font-size:13px;font-weight:bold;position:relative}
+#phone .app span{width:64px;height:64px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:32px;border:3px solid var(--tinta);box-shadow:0 4px 0 rgba(0,0,0,.25)}
+#phone .app em{position:absolute;top:-4px;right:8px;background:var(--rojo);color:#fff;font-style:normal;border-radius:10px;padding:1px 6px;font-size:12px}
+#phone .navb{display:flex;justify-content:center;gap:10px;padding:8px}
+#phone h3{margin:6px 0 8px}
+.item{background:#fff;border:2px solid var(--tinta);border-radius:12px;padding:8px 10px;margin:8px 0;font-size:14px}
+.item h4{margin:0 0 4px;font-size:15px;display:flex;justify-content:space-between;gap:6px}
+.item .btn{padding:5px 10px;font-size:14px}
+.tag{display:inline-block;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:bold;border:2px solid var(--tinta)}
+.tag.ok{background:#8fe0a8}.tag.no{background:#ff9d8f}.tag.pend{background:#fff0b3}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:12px;text-align:center}
+.cal div{background:#fff;border-radius:6px;padding:4px 0;min-height:30px;position:relative}
+.cal .hoy{outline:3px solid var(--rojo)}
+.cal .pas{opacity:.45}
+.cal .dot{display:block;font-size:10px;line-height:1}
+.cal .h{background:none;font-weight:bold}
+</style>
+</head>
+<body>
+
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div class="chip money" id="hMoney">0 €</div>
+    <div class="chip" id="hDate">—</div>
+    <div class="chip" id="hClock">13:00</div>
+    <div class="chip" id="hRep">★★★☆☆</div>
+    <div class="chip" id="hLvl">Nv 1</div>
+  </div>
+  <div id="tickets"></div>
+  <div id="cross"></div>
+  <div id="hint" class="hidden"></div>
+  <div id="hand">Manos vacías</div>
+</div>
+<div id="toasts"></div>
+<div id="pausa" class="hidden">PAUSA<br><small>Haz clic para volver a la cocina</small></div>
+
+<div id="touch" class="hidden">
+  <div id="lookpad"></div>
+  <div id="stick"><i></i></div>
+  <button class="tbtn" id="btnAct">ACCIÓN</button>
+  <button class="tbtn" id="btnPhone">📱</button>
+</div>
+
+<div id="title" class="overlay">
+  <div class="card">
+    <div class="logo">GRAN THEFT<br>BUROCRAZY<small>· SELLO OFICIAL ·</small></div>
+    <p class="sub">Cocinar es fácil. El papeleo, no.</p>
+    <p>Abres una hamburguesería en <b>Cala Tramita</b>, un pueblo de la costa mediterránea. Haz hamburguesas, contrata gente y sobrevive a Hacienda, la Seguridad Social y el Ayuntamiento.</p>
+    <div class="btns" style="justify-content:center">
+      <button class="btn pri" id="bNew">Nueva partida</button>
+      <button class="btn azul hidden" id="bCont">Continuar</button>
+    </div>
+    <div class="keys" id="keysHelp">
+      <div><b>WASD</b> moverse · <b>Ratón</b> mirar</div>
+      <div><b>E / clic</b> coger, dejar, servir, hablar</div>
+      <div><b>Tab / M</b> móvil (personal, calendario, trámites, banco)</div>
+      <div><b>Esc</b> pausa</div>
+    </div>
+  </div>
+</div>
+
+<div id="modal" class="overlay hidden"><div class="card" id="modalCard"></div></div>
+
+<div id="phone" class="hidden">
+  <div class="dev"><div class="scr">
+    <div class="sbar"><span id="pClock">13:00</span><span>📶 Mvstr 4G · 🔋 12%</span></div>
+    <div class="body" id="pBody"></div>
+    <div class="navb"><button class="btn" id="pHome">⌂ Inicio</button><button class="btn mal" id="pClose">Cerrar</button></div>
+  </div></div>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   UTILIDADES
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rint = (a, b) => Math.floor(rnd(a, b + 1));
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const eur = n => ((Math.round(n * 100) / 100) || 0).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+const isTouch = matchMedia('(pointer:coarse)').matches;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+const START = new Date(2026, 5, 1); // lunes 1 de junio de 2026
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const DIAS = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+function dateOf(day) { const d = new Date(START); d.setDate(d.getDate() + day - 1); return d; }
+function dayOf(y, m, d) { return Math.round((new Date(y, m, d) - START) / 864e5) + 1; }
+function fdate(day) { const d = dateOf(day); return `${DIAS[d.getDay()]} ${d.getDate()} de ${MESES[d.getMonth()]}`; }
+function fshort(day) { const d = dateOf(day); return `${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)}`; }
+
+/* ---------- audio sintetizado ---------- */
+let actx = null, sizzleGain = null;
+function audio() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } }
+  if (actx.state === 'suspended') actx.resume();
+  return actx;
+}
+function beep(freq = 600, dur = .08, type = 'square', vol = .05, delay = 0) {
+  const a = actx; if (!a) return;
+  const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur + .02);
+}
+const SFX = {
+  pick: () => beep(720, .06, 'triangle', .07),
+  drop: () => beep(330, .08, 'triangle', .07),
+  cash: () => { beep(1250, .07, 'square', .04); beep(1660, .14, 'square', .04, .08); },
+  bad: () => beep(150, .3, 'sawtooth', .05),
+  stamp: () => { beep(70, .18, 'square', .14); beep(55, .2, 'sine', .14, .02); },
+  notif: () => { beep(880, .07, 'sine', .07); beep(1320, .1, 'sine', .07, .09); },
+  bell: () => { beep(1568, .3, 'sine', .06); beep(2093, .4, 'sine', .04, .05); },
+};
+function setSizzle(n) {
+  const a = actx; if (!a) return;
+  if (!sizzleGain) {
+    const buf = a.createBuffer(1, a.sampleRate, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * .6;
+    const src = a.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = a.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2800;
+    sizzleGain = a.createGain(); sizzleGain.gain.value = 0;
+    src.connect(f).connect(sizzleGain).connect(a.destination); src.start();
+  }
+  sizzleGain.gain.setTargetAtTime(n ? .015 + .008 * n : 0, a.currentTime, .15);
+}
+
+/* ---------- toasts ---------- */
+function toast(msg, cls = 'info', ms = 2600) {
+  const el = document.createElement('div'); el.className = 'toast ' + cls; el.innerHTML = msg;
+  const box = $('#toasts'); box.appendChild(el);
+  while (box.children.length > 4) box.firstChild.remove();
+  setTimeout(() => el.remove(), ms);
+}
+
+/* =====================================================================
+   ESTADO Y GUARDADO
+   ===================================================================== */
+const SAVE_KEY = 'gtb_save_v1';
+let S = null;
+function newState() {
+  return {
+    v: 1, money: 6000, day: 1, rep: 3, xp: 0,
+    open: false,              // ¿el local puede abrir? (Fase 0)
+    tramites: {},             // id -> {ok, intentos}
+    cert: { validUntil: 2 },  // certificado digital FNMT
+    upgrades: { planchas: 1, freidora: false, terraza: false, terrazaLic: false, carta: false },
+    employees: [], candidates: [], nextEmpId: 1, ccc: false,
+    obligations: [], acc: {}, asesor: false, reta: { tarifaPlana: false, alta: false },
+    sanciones: 0, sanitariasMal: 0, flags: {},
+    bank: [], stats: { served: 0, lost: 0, days: 0 },
+    pendingEvents: [], over: null,
+  };
+}
+function save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+function loadSave() { try { const t = localStorage.getItem(SAVE_KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+function money(amount, concept) {
+  S.money += amount;
+  S.bank.unshift({ day: S.day, concept, amount: Math.round(amount * 100) / 100 });
+  if (S.bank.length > 80) S.bank.length = 80;
+}
+const LEVELS = ['Ciudadano ingenuo', 'Opositor en prácticas', 'Usuario de cita previa', 'Gestor de ventanilla', 'Maestro del Sello',
+  'Jefe de Negociado', 'Funcionario honorario', 'Gran Burócrata', 'Leyenda del BOE'];
+const level = () => Math.min(LEVELS.length, 1 + Math.floor(S.xp / 100));
+function addXp(n, why) { const l0 = level(); S.xp += n; if (level() > l0) toast(`📎 ¡Nivel de Burocracia ${level()}: <b>${LEVELS[level() - 1]}</b>!`, 'good', 4000); }
+function addRep(d) { S.rep = clamp(S.rep + d, 0, 5); }
+
+/* hooks para que cada fase enganche su lógica */
+const Hooks = { dayStart: [], dayEnd: [], update: [], prep: [], newDay: [], interact: [], summary: [] };
+
+/* =====================================================================
+   ESCENA 3D (low-poly)
+   ===================================================================== */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x8fd3f5);
+scene.fog = new THREE.Fog(0x8fd3f5, 30, 90);
+const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, .05, 200);
+camera.rotation.order = 'YXZ';
+scene.add(camera);
+scene.add(new THREE.HemisphereLight(0xffffff, 0xffc890, 1.6));
+const sunL = new THREE.DirectionalLight(0xfff0d0, 1.6); sunL.position.set(6, 14, 10); scene.add(sunL);
+addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
+
+const matCache = {};
+const mat = c => matCache[c] || (matCache[c] = new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+const HIDDEN = new THREE.MeshBasicMaterial({ visible: false });
+function mesh(geo, color, x = 0, y = 0, z = 0, parent = scene) { const m = new THREE.Mesh(geo, mat(color)); m.position.set(x, y, z); parent.add(m); return m; }
+const box = (w, h, d, c, x, y, z, p) => mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p);
+const cyl = (rt, rb, h, c, x, y, z, p, seg = 8) => mesh(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y, z, p);
+
+/* colisiones: rectángulos en planta */
+const colliders = [];
+function collide(x, z, w, d) { const c = { x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2, on: true }; colliders.push(c); return c; }
+/* bloque sólido apoyado en el suelo */
+function solid(w, h, d, c, x, z, y0 = 0, p) { collide(x, z, w, d); return box(w, h, d, c, x, y0 + h / 2, z, p); }
+
+/* hitboxes interactivas */
+const hits = [];
+function hitbox(w, h, d, x, y, z, act, parent = scene) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), HIDDEN); m.position.set(x, y, z); m.userData.act = act; parent.add(m); hits.push(m); return m;
+}
+
+function textSprite(text, { bg = '#fffaf0', fg = '#23201c', h = .2, font = 'bold 40px Trebuchet MS', border = '#23201c' } = {}) {
+  const c = document.createElement('canvas'); const x = c.getContext('2d'); x.font = font;
+  const w = Math.ceil(x.measureText(text).width) + 36; c.width = w; c.height = 64;
+  x.fillStyle = bg; x.strokeStyle = border; x.lineWidth = 6;
+  x.beginPath(); x.roundRect(3, 3, w - 6, 58, 14); x.fill(); x.stroke();
+  x.font = font; x.fillStyle = fg; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, w / 2, 34);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t })); s.scale.set(h * w / 64, h, 1); return s;
+}
+function canvasTex(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+
+/* ---------- el local ---------- */
+const ROOM = { x0: -8, x1: 8, z0: -6, z1: 6 };
+const WALL_H = 3.2;
+(function buildWorld() {
+  // exterior: arena, paseo, mar
+  const sand = mesh(new THREE.PlaneGeometry(120, 80), 0xf2d49b, 0, -.01, 30); sand.rotation.x = -Math.PI / 2;
+  const paseo = mesh(new THREE.PlaneGeometry(120, 7), 0xe9c9a8, 0, 0, 9.5); paseo.rotation.x = -Math.PI / 2;
+  const sea = mesh(new THREE.PlaneGeometry(200, 120), 0x1d8fd0, 0, -.05, 95); sea.rotation.x = -Math.PI / 2;
+  const sunM = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffe27a })); sunM.position.set(-30, 26, 120); scene.add(sunM);
+  for (const [x, z] of [[-11, 13], [10, 12], [-16, 20], [15, 22], [4, 26], [-6, 30]]) palm(x, z);
+  for (let i = 0; i < 6; i++) { // sombrillas
+    const x = -24 + i * 9 + rnd(-2, 2), z = 30 + rnd(0, 10);
+    cyl(.05, .05, 2.2, 0xffffff, x, 1.1, z);
+    cyl(0, 1.3, .5, pick([0xe2724b, 0x1d7fbf, 0xffcd3c, 0x3aa66a]), x, 2.3, z, scene, 8);
+  }
+  // casas vecinas
+  for (const [x, w, c] of [[-14, 5, 0xfff3e0], [14, 5, 0xffe0c2], [-20, 6, 0xd6ecff], [20, 6, 0xfff3e0]]) {
+    box(w, 5, 9, c, x, 2.5, 0); box(w + .4, .4, 9.4, 0xe2724b, x, 5.2, 0);
+  }
+
+  // suelo interior: cocina con baldosa, sala con barro cocido
+  const tiles = canvasTex(256, 256, (x, w, h) => { for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { x.fillStyle = (i + j) % 2 ? '#f4f1ea' : '#2c6e9b'; x.fillRect(i * 32, j * 32, 32, 32); } });
+  tiles.wrapS = tiles.wrapT = THREE.RepeatWrapping; tiles.repeat.set(4, 1.25);
+  const kf = new THREE.Mesh(new THREE.PlaneGeometry(16, 5), new THREE.MeshLambertMaterial({ map: tiles })); kf.rotation.x = -Math.PI / 2; kf.position.set(0, .005, -3.5); scene.add(kf);
+  const terr = canvasTex(256, 256, (x) => { for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { x.fillStyle = ['#d9764f', '#cf6a45', '#e08159'][(i * 3 + j) % 3]; x.fillRect(i * 64 + 1, j * 64 + 1, 62, 62); } });
+  terr.wrapS = terr.wrapT = THREE.RepeatWrapping; terr.repeat.set(8, 3.5);
+  const sf = new THREE.Mesh(new THREE.PlaneGeometry(16, 7), new THREE.MeshLambertMaterial({ map: terr })); sf.rotation.x = -Math.PI / 2; sf.position.set(0, .005, 2.5); scene.add(sf);
+  const ceil = mesh(new THREE.PlaneGeometry(16, 12), 0xfffaf0, 0, WALL_H, 0); ceil.rotation.x = Math.PI / 2;
+  for (let x = -6; x <= 6; x += 4) box(.25, .2, 12, 0x8a5a3a, x, WALL_H - .1, 0); // vigas
+
+  // paredes
+  const WC = 0xfffaf0, ZOC = 0x1d7fbf;
+  solid(.3, WALL_H, 12, WC, ROOM.x0 - .15, 0); solid(.3, WALL_H, 12, WC, ROOM.x1 + .15, 0);
+  solid(16.6, WALL_H, .3, WC, 0, ROOM.z0 - .15);
+  box(.32, .5, 12, ZOC, ROOM.x0 - .15, .25, 0); box(.32, .5, 12, ZOC, ROOM.x1 + .15, .25, 0);
+  // azulejos de cocina en la pared del fondo
+  const azu = canvasTex(256, 64, (x) => { for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) { x.fillStyle = (i + j) % 2 ? '#ffffff' : '#ffcd3c'; x.fillRect(i * 16, j * 16, 16, 16); x.fillStyle = '#1d7fbf'; x.fillRect(i * 16 + 6, j * 16 + 6, 4, 4); } });
+  azu.wrapS = THREE.RepeatWrapping; azu.repeat.set(4, 1);
+  const az = new THREE.Mesh(new THREE.PlaneGeometry(16, 1.2), new THREE.MeshLambertMaterial({ map: azu })); az.position.set(0, 1.6, ROOM.z0 + .01); scene.add(az);
+  // fachada con puerta y ventanas
+  const fz = ROOM.z1 + .15;
+  for (const [a, b] of [[-8.3, -5], [-3, -1], [1, 3], [5, 8.3]]) solid(b - a, WALL_H, .3, WC, (a + b) / 2, fz);
+  for (const [a, b] of [[-5, -3], [3, 5]]) { solid(b - a, 1, .3, WC, (a + b) / 2, fz); box(b - a, 1, .3, WC, (a + b) / 2, 2.7, fz); box(b - a, .08, .5, ZOC, (a + b) / 2, 1.04, fz); }
+  box(2, .8, .3, WC, 0, 2.8, fz);
+  box(16.6, .5, .32, ZOC, 0, .25, fz + .01);
+  // toldo
+  for (let i = 0; i < 8; i++) box(2.1, .08, 1.6, i % 2 ? 0xffffff : 0xe2724b, -7.35 + i * 2.1, 3.0, fz + .9).rotation.x = .35;
+  const cartel = textSprite('🍔 BURGER CALA TRAMITA', { bg: '#ffcd3c', h: .55, font: 'bold 44px Trebuchet MS' }); cartel.position.set(0, 3.55, fz + .4); scene.add(cartel);
+
+  // sala: mesas y taburetes
+  for (const [x, z] of [[-5.5, 2.6], [-5.5, 4.6], [5.5, 2.6], [5.5, 4.6], [-3, 4.4], [3, 4.4]]) table(x, z);
+  // plantas
+  for (const [x, z] of [[-7.4, 5.4], [7.4, 5.4], [-7.4, -.3]]) { cyl(.3, .22, .5, 0xe2724b, x, .25, z); mesh(new THREE.IcosahedronGeometry(.45, 0), 0x3aa66a, x, .85, z); collide(x, z, .6, .6); }
+  // cuadro: "licencia" enmarcada (se rellena en la fase 0)
+  const frame = box(1.4, 1, .06, 0x8a5a3a, -7.8, 1.9, 2.5); frame.rotation.y = Math.PI / 2;
+  const pap = textSprite('LICENCIA: EN TRÁMITE', { bg: '#fbf6e6', h: .28, font: 'bold 30px Courier New' }); pap.position.set(-7.7, 1.9, 2.5); scene.add(pap);
+  scene.userData.licencia = pap;
+})();
+
+function palm(x, z) {
+  for (let i = 0; i < 5; i++) { const s = cyl(.18 - i * .02, .2 - i * .02, 1, 0x9a6b3f, x + i * .08, .5 + i * .95, z); s.rotation.z = -.05; }
+  for (let i = 0; i < 6; i++) { const l = box(2.2, .06, .5, 0x2f9a57, x + .4, 5, z); l.rotation.y = i * Math.PI / 3; l.rotation.z = -.35; l.geometry.translate(1, 0, 0); }
+}
+function table(x, z) {
+  cyl(.6, .6, .06, 0xffffff, x, .76, z, scene, 10); cyl(.07, .07, .74, 0x555555, x, .37, z);
+  collide(x, z, 1.2, 1.2);
+  for (const a of [0, Math.PI]) cyl(.22, .22, .06, 0x1d7fbf, x + Math.cos(a) * .95, .45, z + Math.sin(a) * .95);
+}
+
+/* ---------- cocina y estaciones ---------- */
+const ING = {
+  pan: { name: 'pan', e: '🍞', cost: .35 }, carne: { name: 'carne', e: '🥩', cost: 1.4 }, queso: { name: 'queso', e: '🧀', cost: .25 },
+  lechuga: { name: 'lechuga', e: '🥬', cost: .12 }, tomate: { name: 'tomate', e: '🍅', cost: .15 }, bacon: { name: 'bacon', e: '🥓', cost: .45 },
+  ketchup: { name: 'kétchup', e: '🔴', cost: .05 }, mostaza: { name: 'mostaza', e: '🟡', cost: .05 },
+  patatas: { name: 'patatas', e: '🍟', cost: .4 }, refresco: { name: 'refresco', e: '🥤', cost: .6 },
+};
+const PRICE = { base: 7.5, queso: .8, lechuga: .5, tomate: .5, bacon: 1.5, ketchup: .2, mostaza: .2, carneExtra: 3, patatas: 2.5, refresco: 2 };
+const COOK = { raw: .55, burnt: 1.0, secs: 14 }; // la carne pasa de cruda a quemada en COOK.secs segundos
+function cookLabel(c) { return c < COOK.raw ? 'cruda' : c > COOK.burnt ? 'quemada' : 'perfecta'; }
+const C_RAW = new THREE.Color(0xe0607a), C_DONE = new THREE.Color(0x7a4526), C_BURNT = new THREE.Color(0x1a120e);
+function meatColor(c) { return c < .7 ? C_RAW.clone().lerp(C_DONE, c / .7) : C_DONE.clone().lerp(C_BURNT, clamp((c - .95) / .5, 0, 1)); }
+function friesColor(c) { return new THREE.Color(0xf7e27a).lerp(new THREE.Color(0xc98a2a), clamp(c - .6, 0, 1)).lerp(new THREE.Color(0x3a2410), clamp((c - 1.8) / .6, 0, 1)); }
+
+/* malla de un ingrediente (para la mano, el plato y los cajones) */
+function ingMesh(type, cook = 0, top = false) {
+  const g = new THREE.Group(); let h = .03;
+  const M = (geo, c) => { const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: c, flatShading: true })); g.add(m); return m; };
+  switch (type) {
+    case 'pan':
+      if (top) { const d = M(new THREE.SphereGeometry(.16, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xe6a04a); d.scale.y = .6; h = .1;
+        for (let i = 0; i < 6; i++) { const s = M(new THREE.SphereGeometry(.012, 4, 3), 0xfff3d0); const a = i * 1.05; s.position.set(Math.cos(a) * .08, .08, Math.sin(a) * .08); } }
+      else { M(new THREE.CylinderGeometry(.16, .15, .06, 10), 0xe6a04a).position.y = .03; h = .06; }
+      break;
+    case 'carne': { const m = M(new THREE.CylinderGeometry(.15, .15, .05, 9), meatColor(cook)); m.position.y = .025; h = .05; g.userData.meat = m; break; }
+    case 'queso': { const m = M(new THREE.BoxGeometry(.27, .015, .27), 0xffc61a); m.rotation.y = Math.PI / 4; m.position.y = .008; h = .015; break; }
+    case 'lechuga': { const m = M(new THREE.CylinderGeometry(.18, .17, .025, 7), 0x5cc24a); m.position.y = .012; h = .025; break; }
+    case 'tomate': { const m = M(new THREE.CylinderGeometry(.13, .13, .025, 8), 0xe23b2e); m.position.y = .012; h = .025; break; }
+    case 'bacon': for (const dz of [-.05, .05]) { const m = M(new THREE.BoxGeometry(.32, .015, .07), 0xb5473a); m.position.set(0, .008, dz); } h = .015; break;
+    case 'ketchup': { const m = M(new THREE.CylinderGeometry(.11, .11, .012, 8), 0xc4161c); m.position.y = .006; h = .012; break; }
+    case 'mostaza': { const m = M(new THREE.CylinderGeometry(.11, .11, .012, 8), 0xf2c200); m.position.y = .006; h = .012; break; }
+    case 'patatas': { M(new THREE.BoxGeometry(.14, .12, .09), 0xd8433a).position.y = .06;
+      for (let i = 0; i < 7; i++) { const s = M(new THREE.BoxGeometry(.018, .12, .018), friesColor(cook)); s.position.set(-.05 + i * .017, .14, rnd(-.02, .02)); s.rotation.z = rnd(-.2, .2); }
+      h = .2; break; }
+    case 'refresco': { M(new THREE.CylinderGeometry(.05, .05, .16, 10), 0x1d7fbf).position.y = .08; M(new THREE.CylinderGeometry(.045, .05, .01, 10), 0xcccccc).position.y = .165; h = .17; break; }
+  }
+  g.userData.h = h; return g;
+}
+/* plato con la hamburguesa apilada */
+function plateMesh(items) {
+  const g = new THREE.Group();
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(.26, .22, .03, 14), mat(0xffffff)); p.position.y = .015; g.add(p);
+  let y = .03, panes = 0; const sides = [];
+  for (const it of items) {
+    if (it.type === 'patatas' || it.type === 'refresco') { sides.push(it); continue; }
+    const isTop = it.type === 'pan' && panes++ > 0;
+    const m = ingMesh(it.type, it.cook, isTop); m.position.y = y; g.add(m); y += m.userData.h;
+  }
+  sides.forEach((it, i) => { const m = ingMesh(it.type, it.cook); m.position.set(.3 + i * .15, 0, .05); g.add(m); });
+  return g;
+}
+
+const stations = {}; // id -> datos de la estación
+function label(text, x, y, z) { const s = textSprite(text, { h: .16 }); s.position.set(x, y, z); scene.add(s); return s; }
+const KZ = -5.4, IZ = -3.1, BZ = -1.0; // fondo, isla, barra
+const TOP = .95;
+(function buildKitchen() {
+  // encimera del fondo
+  solid(15.4, TOP, .9, 0xb9c4cc, -.3, KZ); box(15.5, .05, 1, 0x7d8b95, -.3, TOP, KZ);
+  // campana extractora
+  box(5.5, .5, 1.1, 0xb9c4cc, -3.6, 2.6, -5.3); box(.6, .7, .6, 0xb9c4cc, -3.6, 3.0, -5.6);
+  // nevera de carne
+  const fr = solid(1.1, 2.1, .9, 0xdfe7ee, -7.3, KZ); box(.06, .7, .06, 0x555555, -6.8, 1.3, KZ + .47);
+  label('🥩 CARNE', -7.3, 2.3, KZ + .5);
+  hitbox(1.2, 2.1, 1.1, -7.3, 1.05, KZ, { t: 'bin', ing: 'carne' });
+  // planchas
+  for (let p = 0; p < 2; p++) {
+    const x = -5.3 + p * 2.1;
+    const grp = new THREE.Group(); scene.add(grp);
+    box(1.8, .1, .8, 0x2b2b2b, x, TOP + .05, KZ, grp); box(1.8, .06, .06, 0x888888, x, TOP + .13, KZ + .4, grp);
+    const lab = textSprite(p ? '🔥 PLANCHA 2' : '🔥 PLANCHA', { h: .16 }); lab.position.set(x, TOP + .7, KZ - .2); grp.add(lab);
+    const slots = [];
+    for (let s = 0; s < 2; s++) {
+      const sx = x - .45 + s * .9;
+      const slot = { patty: null, mesh: null, x: sx, y: TOP + .1, z: KZ };
+      slots.push(slot);
+      const hb = hitbox(.85, .7, .9, sx, TOP + .3, KZ + .05, { t: 'grill', slot }, grp);
+      slot.hb = hb;
+    }
+    stations['plancha' + p] = { grp, slots };
+    if (p === 1) grp.visible = false;
+  }
+  // freidora (mejora)
+  { const grp = new THREE.Group(); scene.add(grp);
+    box(.9, .25, .8, 0x9aa5ad, -1.1, TOP + .12, KZ, grp); box(.7, .05, .6, 0xd9a520, -1.1, TOP + .25, KZ, grp);
+    const basket = box(.4, .2, .35, 0x666666, -1.1, TOP + .45, KZ, grp);
+    const lab = textSprite('🍟 FREIDORA', { h: .16 }); lab.position.set(-1.1, TOP + .85, KZ - .2); grp.add(lab);
+    const st = { grp, basket, state: 'idle', t: 0 };
+    hitbox(.95, .6, .9, -1.1, TOP + .3, KZ, { t: 'fryer', st }, grp);
+    grp.visible = false; stations.freidora = st; }
+  // nevera de bebidas (mejora carta)
+  { const grp = new THREE.Group(); scene.add(grp);
+    box(1, 1.0, .8, 0xd8433a, .4, TOP + .5, KZ, grp); box(.8, .7, .05, 0x9fd3ff, .4, TOP + .5, KZ + .41, grp);
+    const lab = textSprite('🥤 BEBIDAS', { h: .16 }); lab.position.set(.4, TOP + 1.2, KZ); grp.add(lab);
+    hitbox(1, 1, .9, .4, TOP + .5, KZ, { t: 'bin', ing: 'refresco' }, grp);
+    grp.visible = false; stations.bebidas = { grp }; }
+  // fregadero (decorativo... y de normativa)
+  box(1, .05, .6, 0x7d8b95, 2.4, TOP + .03, KZ); cyl(.03, .03, .4, 0xcccccc, 2.4, TOP + .2, KZ - .25);
+  label('🚰 LAVAMANOS (OBLIGATORIO)', 2.4, TOP + .6, KZ);
+
+  // isla central con ingredientes
+  solid(10.8, TOP, .9, 0xffffff, -.8, IZ); box(10.9, .05, 1, 0x1d7fbf, -.8, TOP, IZ);
+  const bins = [['pan', -5.6], ['queso', -4.6], ['lechuga', -3.6], ['tomate', -2.6], ['bacon', -1.6], ['ketchup', -.6], ['mostaza', .3]];
+  for (const [ing, x] of bins) {
+    const grp = new THREE.Group(); scene.add(grp);
+    box(.8, .14, .7, 0xdfe7ee, x, TOP + .07, IZ, grp);
+    for (let i = 0; i < 3; i++) { const m = ingMesh(ing, .7, ing === 'pan' && i === 2); m.position.set(x + rnd(-.15, .15), TOP + .12 + i * .05, IZ + rnd(-.12, .12)); grp.add(m); }
+    const lab = textSprite(`${ING[ing].e} ${ING[ing].name.toUpperCase()}`, { h: .14 }); lab.position.set(x, TOP + .55, IZ); grp.add(lab);
+    hitbox(.85, .5, .9, x, TOP + .2, IZ, { t: 'bin', ing }, grp);
+    stations['bin_' + ing] = { grp };
+    if (ing === 'tomate' || ing === 'bacon') grp.visible = false;
+  }
+  // tablas de montaje
+  for (let i = 0; i < 2; i++) {
+    const x = 1.8 + i * 1.6;
+    box(1.2, .05, .7, 0xc98a4a, x, TOP + .03, IZ);
+    const lab = textSprite('🍽 MONTAJE ' + (i + 1), { h: .14 }); lab.position.set(x, TOP + .75, IZ - .3); scene.add(lab);
+    const st = { plate: { items: [] }, vis: null, x, y: TOP + .06, z: IZ };
+    hitbox(1.2, .5, .9, x, TOP + .2, IZ, { t: 'board', st });
+    stations['tabla' + i] = st; refreshBoard(st);
+  }
+  // barra
+  solid(13.2, 1.05, .7, 0x1d7fbf, -1.4, BZ); box(13.4, .07, .9, 0xc98a4a, -1.4, 1.07, BZ);
+  const azb = canvasTex(256, 32, (x) => { for (let i = 0; i < 16; i++) { x.fillStyle = i % 2 ? '#ffffff' : '#ffcd3c'; x.fillRect(i * 16, 0, 16, 32); x.fillStyle = '#e2724b'; x.beginPath(); x.arc(i * 16 + 8, 16, 4, 0, 7); x.fill(); } });
+  azb.wrapS = THREE.RepeatWrapping; azb.repeat.set(6, 1);
+  const az = new THREE.Mesh(new THREE.PlaneGeometry(13.2, .5), new THREE.MeshLambertMaterial({ map: azb })); az.position.set(-1.4, .6, BZ + .36); scene.add(az);
+  // cubo de basura
+  cyl(.3, .26, .75, 0x3aa66a, 6.9, .37, -4.3); cyl(.32, .32, .06, 0x2d7f50, 6.9, .77, -4.3); collide(6.9, -4.3, .6, .6);
+  label('🗑 BASURA', 6.9, 1.2, -4.3);
+  hitbox(.7, 1, .7, 6.9, .5, -4.3, { t: 'trash' });
+  // hojas de reclamaciones y carteles (se ven tras la fase 0)
+  const hojas = textSprite('📋 HAY HOJAS DE RECLAMACIONES', { bg: '#fff', h: .2, font: 'bold 32px Trebuchet MS' }); hojas.position.set(4.5, 2.2, 5.95); hojas.visible = false; scene.add(hojas);
+  scene.userData.hojas = hojas;
+})();
+
+function refreshBoard(st) {
+  if (st.vis) scene.remove(st.vis);
+  st.vis = null;
+  if (st.plate) { st.vis = plateMesh(st.plate.items); st.vis.position.set(st.x, st.y, st.z); scene.add(st.vis); }
+}
+function applyUpgrades() {
+  const u = S.upgrades;
+  stations.plancha1.grp.visible = u.planchas > 1;
+  for (const s of stations.plancha1.slots) s.hb.userData.disabled = u.planchas < 2;
+  stations.freidora.grp.visible = u.freidora;
+  stations.bebidas.grp.visible = u.carta;
+  stations.bin_tomate.grp.visible = u.carta; stations.bin_bacon.grp.visible = u.carta;
+  if (window.applyTerraza) window.applyTerraza();
+}
+
+/* =====================================================================
+   JUGADOR: movimiento, cámara, mano
+   ===================================================================== */
+const player = { x: 4.2, z: -2.0, yaw: Math.PI, pitch: -.12, r: .28, speed: 3.4 };
+const keys = {};
+const hand = { item: null, vis: null };
+const handGroup = new THREE.Group(); handGroup.position.set(.32, -.32, -.62); camera.add(handGroup);
+function setHand(item) {
+  hand.item = item;
+  if (hand.vis) handGroup.remove(hand.vis);
+  hand.vis = null;
+  if (item) {
+    hand.vis = item.kind === 'plate' ? plateMesh(item.items) : ingMesh(item.type, item.cook, false);
+    hand.vis.scale.setScalar(item.kind === 'plate' ? .8 : 1.1); handGroup.add(hand.vis);
+  }
+  $('#hand').innerHTML = handText();
+}
+function handText() {
+  const it = hand.item; if (!it) return 'Manos vacías';
+  if (it.kind === 'plate') return '🍽 Plato: ' + (it.items.map(i => ING[i.type].e).join(' ') || 'vacío');
+  if (it.type === 'carne') return `🥩 Carne (${cookLabel(it.cook)})`;
+  if (it.type === 'patatas') return `🍟 Patatas (${it.cook < 1 ? 'blandas' : it.cook > 2 ? 'quemadas' : 'crujientes'})`;
+  return `${ING[it.type].e} ${ING[it.type].name}`;
+}
+function movePlayer(dx, dz) {
+  const tryAxis = (nx, nz) => {
+    for (const c of colliders) {
+      if (!c.on) continue;
+      if (nx + player.r > c.x0 && nx - player.r < c.x1 && nz + player.r > c.z0 && nz - player.r < c.z1) return false;
+    }
+    return nx > -7.9 && nx < 7.9 && nz > -5.9 && nz < 13;
+  };
+  if (tryAxis(player.x + dx, player.z)) player.x += dx;
+  if (tryAxis(player.x, player.z + dz)) player.z += dz;
+}
+
+/* ratón / teclado */
+const canvas = renderer.domElement;
+const locked = () => document.pointerLockElement === canvas;
+function lockPointer() { if (!isTouch && canvas.requestPointerLock && !locked()) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } }
+addEventListener('keydown', e => {
+  audio();
+  keys[e.code] = true;
+  if (uiBlocking()) { if ((e.code === 'Tab' || e.code === 'KeyM') && !$('#phone').classList.contains('hidden')) { e.preventDefault(); closePhone(); } return; }
+  if (e.code === 'KeyE') doInteract();
+  if (e.code === 'Tab' || e.code === 'KeyM') { e.preventDefault(); openPhone(); }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+addEventListener('mousemove', e => {
+  if (!locked()) return;
+  player.yaw -= e.movementX * .0022; player.pitch = clamp(player.pitch - e.movementY * .0022, -1.35, 1.2);
+});
+canvas.addEventListener('mousedown', e => {
+  audio();
+  if (uiBlocking()) return;
+  if (!locked()) { lockPointer(); return; }
+  if (e.button === 0) doInteract();
+});
+document.addEventListener('pointerlockchange', () => { if (!locked()) for (const k in keys) keys[k] = false; });
+
+/* táctil: joystick + arrastrar para mirar */
+const touch = { sx: 0, sy: 0, stickId: null, lookId: null, lx: 0, ly: 0, ox: 0, oy: 0 };
+if (isTouch) {
+  $('#touch').classList.remove('hidden'); $('#cross').style.display = '';
+  $('#keysHelp').innerHTML = '<div><b>Joystick</b> moverse · <b>Arrastra</b> a la derecha para mirar</div><div><b>ACCIÓN</b> coger, dejar, servir, hablar · <b>📱</b> móvil</div>';
+  const stick = $('#stick'), knob = stick.firstElementChild;
+  stick.addEventListener('touchstart', e => { audio(); const t = e.changedTouches[0]; touch.stickId = t.identifier; const r = stick.getBoundingClientRect(); touch.ox = r.left + r.width / 2; touch.oy = r.top + r.height / 2; e.preventDefault(); }, { passive: false });
+  const lp = $('#lookpad');
+  lp.addEventListener('touchstart', e => { audio(); const t = e.changedTouches[0]; touch.lookId = t.identifier; touch.lx = t.clientX; touch.ly = t.clientY; e.preventDefault(); }, { passive: false });
+  addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touch.stickId) {
+        let dx = t.clientX - touch.ox, dy = t.clientY - touch.oy; const l = Math.hypot(dx, dy), m = 50;
+        if (l > m) { dx *= m / l; dy *= m / l; }
+        touch.sx = dx / m; touch.sy = dy / m; knob.style.transform = `translate(${dx}px,${dy}px)`;
+      } else if (t.identifier === touch.lookId) {
+        player.yaw -= (t.clientX - touch.lx) * .006; player.pitch = clamp(player.pitch - (t.clientY - touch.ly) * .006, -1.35, 1.2);
+        touch.lx = t.clientX; touch.ly = t.clientY;
+      }
+    }
+  }, { passive: false });
+  addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touch.stickId) { touch.stickId = null; touch.sx = touch.sy = 0; knob.style.transform = ''; }
+      if (t.identifier === touch.lookId) touch.lookId = null;
+    }
+  });
+  $('#btnAct').addEventListener('touchstart', e => { e.preventDefault(); audio(); if (!uiBlocking()) doInteract(); }, { passive: false });
+  $('#btnPhone').addEventListener('touchstart', e => { e.preventDefault(); audio(); if (!uiBlocking()) openPhone(); }, { passive: false });
+}
+
+/* =====================================================================
+   INTERACCIÓN
+   ===================================================================== */
+const ray = new THREE.Raycaster(); const center = new THREE.Vector2(0, 0);
+let target = null;
+function findTarget() {
+  ray.setFromCamera(center, camera); ray.far = 3.4;
+  const list = hits.filter(h => h.parent && isVisibleChain(h) && !h.userData.disabled);
+  const r = ray.intersectObjects(list, false);
+  for (const i of r) {
+    const a = i.object.userData.act;
+    if (a.t === 'customer' || a.t === 'worker' ? i.distance < 3.4 : i.distance < 2.4) return a;
+  }
+  return null;
+}
+function isVisibleChain(o) { for (let p = o.parent; p; p = p.parent) if (p.visible === false) return false; return true; }
+function hintFor(a) {
+  const it = hand.item;
+  switch (a.t) {
+    case 'bin': {
+      const n = `${ING[a.ing].e} ${ING[a.ing].name}`;
+      if (!it) return `Coger ${n}`;
+      if (it.kind === 'ing' && it.type === a.ing && !(a.ing === 'carne' && it.cook > 0)) return `Devolver ${n}`;
+      return `${n} (tienes las manos ocupadas)`;
+    }
+    case 'grill':
+      if (a.slot.patty) return it ? `Plancha: carne ${cookLabel(a.slot.patty.cook)}` : `Coger carne (${cookLabel(a.slot.patty.cook)})`;
+      return it && it.type === 'carne' ? 'Poner carne en la plancha' : 'Plancha libre';
+    case 'fryer': {
+      const st = a.st;
+      if (st.state === 'idle') return it ? 'Freidora (manos ocupadas)' : 'Freír patatas';
+      return it ? 'Freidora' : `Sacar patatas (${st.t < 1 ? 'aún blandas' : st.t > 2 ? '¡quemadas!' : 'en su punto'})`;
+    }
+    case 'board': {
+      const p = a.st.plate;
+      if (it && it.kind === 'ing') return p ? `Añadir ${ING[it.type].name} al plato` : 'No hay plato';
+      if (it && it.kind === 'plate') return p ? 'Ya hay un plato aquí' : 'Dejar plato';
+      return p && p.items.length ? 'Coger el plato montado' : 'Tabla de montaje (plato vacío)';
+    }
+    case 'trash': return it ? 'Tirar a la basura' : 'Basura';
+    case 'customer': return a.c.state === 'wait' ? (it && it.kind === 'plate' ? `Servir a ${a.c.name}` : `${a.c.name}: pedido #${a.c.order.id}`) : a.c.name;
+    default: for (const h of Hooks.interact) { const r = h.hint && h.hint(a); if (r) return r; } return '';
+  }
+}
+function doInteract() {
+  const a = target; if (!a) return;
+  const it = hand.item;
+  switch (a.t) {
+    case 'bin':
+      if (!it) { setHand({ kind: 'ing', type: a.ing, cook: 0 }); Day.costs += ING[a.ing].cost; SFX.pick(); }
+      else if (it.kind === 'ing' && it.type === a.ing && !(a.ing === 'carne' && it.cook > 0)) { Day.costs -= ING[a.ing].cost; setHand(null); SFX.drop(); }
+      else toast('Tienes las manos ocupadas. Usa la basura o una tabla de montaje.', 'warn', 1800);
+      break;
+    case 'grill': {
+      const s = a.slot;
+      if (!s.patty && it && it.type === 'carne') { s.patty = { cook: it.cook }; s.mesh = ingMesh('carne', it.cook); s.mesh.position.set(s.x, s.y, s.z); scene.add(s.mesh); setHand(null); SFX.drop(); }
+      else if (s.patty && !it) { setHand({ kind: 'ing', type: 'carne', cook: s.patty.cook }); scene.remove(s.mesh); s.patty = null; s.mesh = null; SFX.pick(); }
+      else if (!s.patty && it) toast('En la plancha solo va la carne. Lo demás, a la tabla de montaje.', 'warn', 1800);
+      break;
+    }
+    case 'fryer': {
+      const st = a.st;
+      if (it) { toast('Manos ocupadas.', 'warn', 1200); break; }
+      if (st.state === 'idle') { st.state = 'fry'; st.t = 0; Day.costs += ING.patatas.cost; SFX.drop(); }
+      else { setHand({ kind: 'ing', type: 'patatas', cook: st.t }); st.state = 'idle'; st.t = 0; SFX.pick(); }
+      break;
+    }
+    case 'board': {
+      const st = a.st;
+      if (it && it.kind === 'ing' && st.plate) {
+        if (st.plate.items.length >= 12) { toast('¡Eso ya no es una hamburguesa, es un edificio sin licencia!', 'warn'); break; }
+        st.plate.items.push({ type: it.type, cook: it.cook }); setHand(null); refreshBoard(st); SFX.drop();
+      } else if (it && it.kind === 'plate' && !st.plate) { st.plate = it; setHand(null); refreshBoard(st); SFX.drop(); }
+      else if (!it && st.plate && st.plate.items.length) { setHand({ kind: 'plate', items: st.plate.items }); st.plate = { items: [] }; refreshBoard(st); SFX.pick(); }
+      else if (!it) toast('El plato está vacío. Trae ingredientes.', 'info', 1500);
+      break;
+    }
+    case 'trash':
+      if (it) { setHand(null); SFX.drop(); toast(pick(['A la basura. Eso también es dinero.', 'Desperdicio alimentario anotado (mentalmente).', 'Adiós, coste de materia prima.']), 'info', 1500); }
+      break;
+    case 'customer': {
+      const c = a.c;
+      if (c.state !== 'wait') break;
+      if (it && it.kind === 'plate') serve(c, it.items);
+      else toast(`${c.name}: «${orderText(c.order)}»`, 'info', 2600);
+      break;
+    }
+    default: for (const h of Hooks.interact) if (h.act && h.act(a)) break;
+  }
+}
+
+/* =====================================================================
+   CLIENTES Y COMANDAS
+   ===================================================================== */
+const NOMBRES_C = ['Sr. Ramírez', 'Doña Pura', 'Toñi', 'Chimo', 'Vicenta', 'Pepe el del quiosco', 'Mari Loli', 'Un guiri', 'Otro guiri', 'Jordi', 'Amparo', 'Kike', 'Nieves', 'Fermín', 'Sole', 'Andreu', 'Rocío', 'Iker', 'Begoña', 'El cartero'];
+const QUEJAS_CRUDA = ['¡Esto está más crudo que mi declaración de la renta!', '¡Que la carne aún hace muuu!', '¡Cruda! Voy a llamar a Sanidad...'];
+const QUEJAS_QUEMADA = ['Esto parece carbón vegetal homologado.', '¿Me la ha hecho con soplete?', 'Sabe a incendio forestal.'];
+const QUEJAS_MAL = ['¡Esto no es lo que he pedido!', 'Yo pedí otra cosa, pero vale, lo que usted diga...', '¿Y mi pedido? Esto es de otra mesa.'];
+const FELIZ = ['¡Bonísima, oiga!', '¡Qué maravilla, mejor que la de mi suegra!', '¡De diez! Vuelvo mañana.', '¡Esto sí que es una hamburguesa!'];
+
+const spotsBarra = [-6.6, -4.9, -3.2, -1.5, .2, 1.9, 3.6].map(x => ({ x, z: -.15, face: Math.PI, c: null, inside: true }));
+const spotsTerraza = [-6, -3.5, 3.5, 6].map(x => ({ x, z: 9.6, face: 0, c: null, inside: false, terraza: true }));
+const customers = [];
+let orderSeq = 1;
+
+function makePerson(seed = {}) {
+  const g = new THREE.Group();
+  const skin = seed.skin ?? pick([0xf1c7a0, 0xd9a37a, 0xa86b45, 0x7a4a2e, 0xf6d8b8]);
+  const shirt = seed.shirt ?? pick([0xe2724b, 0x1d7fbf, 0xffcd3c, 0x3aa66a, 0xa02bd6, 0xff7fa8, 0x23b5b5, 0xffffff]);
+  const pants = seed.pants ?? pick([0x2d3e6b, 0x444444, 0x7a5a3a, 0x1d7fbf, 0xd9c8a0]);
+  const hair = seed.hair ?? pick([0x2b1a10, 0x6b4423, 0xe8c45a, 0x999999, 0xb8401f, 0x111111]);
+  const P = (geo, c, x, y, z) => { const m = new THREE.Mesh(geo, mat(c)); m.position.set(x, y, z); g.add(m); return m; };
+  const legs = [P(new THREE.BoxGeometry(.17, .8, .2), pants, -.11, .4, 0), P(new THREE.BoxGeometry(.17, .8, .2), pants, .11, .4, 0)];
+  P(new THREE.BoxGeometry(.52, .62, .3), shirt, 0, 1.11, 0);
+  const arms = [P(new THREE.BoxGeometry(.13, .58, .15), shirt, -.33, 1.12, 0), P(new THREE.BoxGeometry(.13, .58, .15), shirt, .33, 1.12, 0)];
+  P(new THREE.BoxGeometry(.34, .36, .32), skin, 0, 1.62, 0);
+  P(new THREE.BoxGeometry(.36, .12, .34), hair, 0, 1.84, -.01);
+  for (const dx of [-.08, .08]) P(new THREE.BoxGeometry(.05, .05, .02), 0x111111, dx, 1.65, .165);
+  if (seed.gafas) P(new THREE.BoxGeometry(.3, .07, .03), 0x111111, 0, 1.66, .17);
+  if (seed.gorro) { P(new THREE.CylinderGeometry(.2, .2, .22, 8), 0xffffff, 0, 1.98, 0); P(new THREE.SphereGeometry(.22, 8, 5), 0xffffff, 0, 2.12, 0); }
+  g.userData.legs = legs; g.userData.arms = arms;
+  return g;
+}
+function barSprite() {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 18;
+  const t = new THREE.CanvasTexture(c); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false })); s.scale.set(.7, .1, 1); s.userData.c = c; s.renderOrder = 10; return s;
+}
+function drawBar(s, f) {
+  const c = s.userData.c, x = c.getContext('2d');
+  x.clearRect(0, 0, 128, 18); x.fillStyle = '#23201c'; x.fillRect(0, 0, 128, 18);
+  x.fillStyle = f > .5 ? '#3aa66a' : f > .25 ? '#ffcd3c' : '#d8433a'; x.fillRect(3, 3, 122 * f, 12); s.material.map.needsUpdate = true;
+}
+
+function genOrder(vip = false) {
+  const u = S.upgrades; const items = { carne: 1 };
+  const extras = ['queso', 'lechuga', 'ketchup', 'mostaza']; if (u.carta) extras.push('tomate', 'bacon');
+  const n = vip ? 3 : rint(0, Math.min(3, 1 + Math.floor(S.day / 4)));
+  const pool = [...extras]; for (let i = 0; i < n && pool.length; i++) items[pool.splice(rint(0, pool.length - 1), 1)[0]] = 1;
+  if (u.carta && Math.random() < .2) items.carne = 2;
+  if (u.freidora && Math.random() < .45) items.patatas = 1;
+  if (u.carta && Math.random() < .35) items.refresco = 1;
+  let price = PRICE.base;
+  for (const k in items) price += k === 'carne' ? (items[k] - 1) * PRICE.carneExtra : PRICE[k] * items[k];
+  return { id: orderSeq++, items, price, vip };
+}
+function orderText(o) {
+  const parts = [o.items.carne > 1 ? 'doble de carne' : 'una hamburguesa'];
+  for (const k in o.items) if (k !== 'carne') parts.push(ING[k].name);
+  return parts.join(', ') + ', carne en su punto';
+}
+function orderEmojis(o) {
+  let s = '🍞'; for (let i = 0; i < o.items.carne; i++) s += '🥩';
+  for (const k in o.items) if (k !== 'carne') s += ING[k].e;
+  return s + '🍞';
+}
+
+function freeSpots() { return [...spotsBarra, ...(S.upgrades.terraza ? spotsTerraza : [])].filter(s => !s.c); }
+function spawnCustomer(opts = {}) {
+  const fs = freeSpots(); if (!fs.length) return null;
+  const spot = opts.spot || pick(fs);
+  const vip = !!opts.vip;
+  const g = makePerson(vip ? { gafas: true, shirt: 0xa02bd6 } : {});
+  g.position.set(rnd(-.6, .6), 0, 15); scene.add(g);
+  const c = {
+    g, spot, name: opts.name || pick(NOMBRES_C), order: genOrder(vip), state: 'in', vip,
+    patience: 1, patienceMax: (vip ? 50 : rnd(65, 95)) * (spot.terraza ? 1.15 : 1), waited: 0,
+    path: spot.terraza ? [[spot.x, 11], [spot.x, spot.z]] : [[0, 7], [0, 1.2], [spot.x, 1.2], [spot.x, spot.z]],
+    bar: barSprite(), tag: null, servedBy: null, walk: 0,
+  };
+  spot.c = c;
+  c.bar.position.y = 2.25; g.add(c.bar); drawBar(c.bar, 1);
+  c.tag = textSprite(`#${c.order.id}`, { h: .22, bg: vip ? '#e9c8ff' : '#ffcd3c' }); c.tag.position.y = 2.5; c.tag.visible = false; g.add(c.tag);
+  hitbox(.7, 1.9, .6, 0, .95, 0, { t: 'customer', c }, g);
+  customers.push(c);
+  return c;
+}
+function walkAlong(c, dt) {
+  const tgt = c.path[0]; if (!tgt) return true;
+  const dx = tgt[0] - c.g.position.x, dz = tgt[1] - c.g.position.z, d = Math.hypot(dx, dz), sp = 2.2 * dt;
+  c.walk += dt * 9;
+  const sw = Math.sin(c.walk) * .5; c.g.userData.legs[0].rotation.x = sw; c.g.userData.legs[1].rotation.x = -sw;
+  if (d < sp) { c.g.position.x = tgt[0]; c.g.position.z = tgt[1]; c.path.shift(); return !c.path.length; }
+  c.g.position.x += dx / d * sp; c.g.position.z += dz / d * sp; c.g.rotation.y = Math.atan2(dx, dz);
+  return false;
+}
+function leave(c, mood) {
+  c.state = 'out'; c.tag.visible = false; c.bar.visible = false; c.spot.c = null;
+  const sp = c.spot;
+  c.path = sp.terraza ? [[sp.x, 11], [0, 15]] : [[sp.x, 1.2], [0, 1.2], [0, 7], [0, 15]];
+  if (mood) { const b = textSprite(mood, { h: .25, bg: '#fff' }); b.position.y = 2.4; c.g.add(b); }
+  for (const h of hits) if (h.userData.act.c === c) h.userData.disabled = true;
+}
+function updateCustomers(dt) {
+  for (let i = customers.length - 1; i >= 0; i--) {
+    const c = customers[i];
+    if (c.state === 'in') { if (walkAlong(c, dt)) { c.state = 'wait'; c.g.rotation.y = c.spot.face; c.tag.visible = true; SFX.bell(); c.g.userData.legs.forEach(l => l.rotation.x = 0); } }
+    else if (c.state === 'wait') {
+      c.waited += dt;
+      c.patience = clamp(1 - c.waited / c.patienceMax, 0, 1);
+      if ((c._b = (c._b || 0) + dt) > .25) { c._b = 0; drawBar(c.bar, c.patience); }
+      c.g.userData.arms[0].rotation.x = c.patience < .25 ? Math.sin(performance.now() / 120) * .6 : 0;
+      if (c.patience <= 0) {
+        leave(c, '😡'); SFX.bad(); Day.lost++; S.stats.lost++; addRep(c.vip ? -.5 : -.12);
+        toast(`${c.name} se ha ido harto/a de esperar. ${pick(['«¡Ni en la ventanilla de Tráfico se espera tanto!»', '«¡Me voy al chiringuito!»', '«¡Pongo reseña, eh!»'])}`, 'bad');
+        if (c.vip) toast('📸 El influencer publica: «Cala Tramita: 0 estrellas, como mi paciencia». Reputación por los suelos.', 'bad', 4500);
+      }
+    } else if (c.state === 'out') { if (walkAlong(c, dt)) { scene.remove(c.g); customers.splice(i, 1); for (let k = hits.length - 1; k >= 0; k--) if (hits[k].userData.act.c === c) hits.splice(k, 1); } }
+  }
+}
+
+/* evaluación del plato contra la comanda */
+function evalPlate(items, order) {
+  const want = { ...order.items, pan: 2 }, have = {};
+  let raw = 0, burnt = 0, friesBad = 0;
+  for (const it of items) {
+    have[it.type] = (have[it.type] || 0) + 1;
+    if (it.type === 'carne') { if (it.cook < COOK.raw) raw++; else if (it.cook > COOK.burnt) burnt++; }
+    if (it.type === 'patatas' && (it.cook < 1 || it.cook > 2)) friesBad++;
+  }
+  let diff = 0; for (const k of new Set([...Object.keys(want), ...Object.keys(have)])) diff += Math.abs((want[k] || 0) - (have[k] || 0));
+  const q = clamp(1 - diff * .22 - raw * .45 - burnt * .35 - friesBad * .15, 0, 1);
+  return { q, diff, raw, burnt, friesBad };
+}
+function serve(c, items, by = null) {
+  const r = evalPlate(items, c.order);
+  if (!by) setHand(null);
+  c.state = 'served';
+  let paid = 0, tip = 0, msg;
+  if (r.raw) { Day.rawServed += r.raw; }
+  if (r.q < .35) {
+    msg = r.raw ? pick(QUEJAS_CRUDA) : r.burnt ? pick(QUEJAS_QUEMADA) : pick(QUEJAS_MAL);
+    addRep(c.vip ? -.6 : -.15); SFX.bad();
+    toast(`${c.name}: «${msg}» No paga.`, 'bad', 3200);
+    leave(c, '🤢');
+  } else {
+    paid = c.order.price;
+    const speed = c.patience;
+    tip = Math.round(paid * (.04 + .22 * speed) * r.q * (by && by.tipMul ? by.tipMul : 1) * 100) / 100;
+    if (r.q < .8) tip = 0;
+    msg = r.q >= .95 ? pick(FELIZ) : r.raw ? 'Un poco cruda... pero tengo hambre.' : r.burnt ? 'Algo tostadita, pero bueno.' : 'Le falta algo, pero pasable.';
+    addRep(c.vip ? (r.q >= .95 && speed > .4 ? .6 : -.3) : (r.q - .7) * .08 + (speed > .5 ? .02 : 0));
+    Day.sales += paid; Day.tips += tip; Day.served++; S.stats.served++;
+    SFX.cash();
+    toast(`${by ? by.name + ' sirve a ' : ''}${c.name}: «${msg}» +${eur(paid)}${tip ? ` · propina ${eur(tip)}` : ''}`, r.q >= .95 ? 'good' : 'warn', 2800);
+    if (c.vip) toast(r.q >= .95 && speed > .4 ? '📸 El influencer sube un reel: «¡Mejor burger de la costa!» ⭐⭐⭐⭐⭐' : '📸 El influencer pone cara de «meh» en directo para 300.000 seguidores...', r.q >= .95 && speed > .4 ? 'good' : 'bad', 4500);
+    leave(c, r.q >= .95 ? '😍' : '🙂');
+  }
+  Day.log.push({ q: r.q, raw: r.raw, by: by ? by.id : null });
+  return r;
+}
+
+/* =====================================================================
+   LA JORNADA
+   ===================================================================== */
+const DAY_LEN = 210; // segundos reales (3,5 min)
+const Day = { running: false, t: 0, spawnT: 3, sales: 0, tips: 0, costs: 0, served: 0, lost: 0, rawServed: 0, rush: 1, log: [], vipDone: false, vipAt: -1 };
+function resetDay() { Object.assign(Day, { running: false, t: 0, spawnT: 3, sales: 0, tips: 0, costs: 0, served: 0, lost: 0, rawServed: 0, rush: 1, log: [], vipDone: false, vipAt: -1 }); }
+function clockStr(t = Day.t) { const m = 13 * 60 + Math.floor(t / DAY_LEN * 600); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
+
+function startService() {
+  Day.running = true;
+  player.x = 4.2; player.z = -2.0; player.yaw = Math.PI; player.pitch = -.12;
+  for (const h of Hooks.dayStart) h();
+  toast(`🔓 ¡Abrimos! ${fdate(S.day)}. Servicio de 13:00 a 23:00.`, 'good');
+  lockPointer();
+}
+function endService() {
+  Day.running = false;
+  for (const c of customers) if (c.state !== 'out') leave(c, '👋');
+  for (let p = 0; p < 2; p++) for (const s of stations['plancha' + p].slots) { if (s.mesh) scene.remove(s.mesh); s.patty = null; s.mesh = null; }
+  stations.freidora.state = 'idle';
+  for (let i = 0; i < 2; i++) { stations['tabla' + i].plate = { items: [] }; refreshBoard(stations['tabla' + i]); }
+  setHand(null); setSizzle(0);
+  if (document.exitPointerLock) document.exitPointerLock();
+  showSummary();
+}
+function updateDay(dt) {
+  Day.t += dt;
+  // planchas
+  let cooking = 0;
+  for (let p = 0; p < 2; p++) for (const s of stations['plancha' + p].slots) if (s.patty) {
+    cooking++; s.patty.cook += dt / COOK.secs;
+    s.mesh.userData.meat.material.color.copy(meatColor(s.patty.cook));
+    s.mesh.position.y = s.y + Math.abs(Math.sin(performance.now() / 90)) * .004;
+  }
+  setSizzle(cooking);
+  const fr = stations.freidora;
+  if (fr.state === 'fry') { fr.t += dt / 6; fr.basket.position.y = TOP + .3; } else fr.basket.position.y = TOP + .45;
+  // clientes
+  const open = Day.t < DAY_LEN * .9;
+  Day.spawnT -= dt;
+  if (open && Day.spawnT <= 0) {
+    spawnCustomer();
+    const rate = (.55 + S.rep / 6) * Day.rush * (S.upgrades.terraza ? 1.25 : 1);
+    Day.spawnT = rnd(9, 17) / rate;
+  }
+  if (Day.vipAt > 0 && !Day.vipDone && Day.t > Day.vipAt) { Day.vipDone = !!spawnCustomer({ vip: true, name: '@ElGastroCuñao' }); if (Day.vipDone) toast('📸 ¡Ha llegado el influencer gastronómico <b>@ElGastroCuñao</b>! Sírvele perfecto y rápido.', 'warn', 4500); }
+  updateCustomers(dt);
+  for (const h of Hooks.update) h(dt);
+  if (Day.t >= DAY_LEN) endService();
+}
+
+/* =====================================================================
+   PANTALLAS: modal genérico, resumen, preparación
+   ===================================================================== */
+let modalResolve = null;
+function modal(html, buttons = [{ label: 'Vale', cls: 'pri', value: true }], onMount) {
+  return new Promise(res => {
+    if (document.exitPointerLock) document.exitPointerLock();
+    const card = $('#modalCard'); card.innerHTML = html;
+    if (buttons && buttons.length) {
+      const b = document.createElement('div'); b.className = 'btns';
+      for (const bt of buttons) {
+        const el = document.createElement('button'); el.className = 'btn ' + (bt.cls || ''); el.innerHTML = bt.label;
+        if (bt.disabled) el.disabled = true;
+        el.onclick = () => { if (bt.check && !bt.check()) return; closeModal(bt.value); };
+        b.appendChild(el);
+      }
+      card.appendChild(b);
+    }
+    $('#modal').classList.remove('hidden'); card.scrollTop = 0;
+    modalResolve = res;
+    if (onMount) onMount(card);
+  });
+}
+function closeModal(v) { $('#modal').classList.add('hidden'); const r = modalResolve; modalResolve = null; if (r) r(v); }
+const uiBlocking = () => !$('#modal').classList.contains('hidden') || !$('#phone').classList.contains('hidden') || !$('#title').classList.contains('hidden');
+
+async function showSummary() {
+  const sup = Math.round(Day.costs * 100) / 100;
+  money(Day.sales, `Caja del día (${Day.served} comandas)`);
+  if (Day.tips) money(Day.tips, 'Bote de propinas');
+  if (sup > 0) money(-sup, 'Factura proveedor: Cárnicas y Panes Cala Tramita S.L.');
+  S.stats.days++;
+  const rows = [
+    ['Ventas (IVA 10 % incluido)', Day.sales], ['Propinas', Day.tips], ['Proveedores (materia prima)', -sup],
+  ];
+  const extra = [];
+  for (const h of Hooks.dayEnd) { const r = h(); if (r) { if (r.rows) rows.push(...r.rows); if (r.html) extra.push(r.html); } }
+  const total = rows.reduce((a, r) => a + r[1], 0);
+  const html = `<h2>🧾 Cierre de caja · ${fdate(S.day)}</h2>
+  <p class="muted">Clientes servidos: <b>${Day.served}</b> · se fueron sin comer: <b>${Day.lost}</b> · reputación: <b>${stars(S.rep)}</b></p>
+  <table class="res">${rows.map(r => `<tr><td>${r[0]}</td><td class="${r[1] >= 0 ? 'pos' : 'negt'}">${eur(r[1])}</td></tr>`).join('')}
+  <tr class="tot"><td>Resultado del día</td><td class="${total >= 0 ? 'pos' : 'negt'}">${eur(total)}</td></tr></table>
+  <p>Saldo en el banco: <b>${eur(S.money)}</b></p>${extra.join('')}`;
+  const sumHooks = Hooks.summary.slice();
+  await modal(html, [{ label: 'Irse a dormir 😴', cls: 'pri', value: true, check: () => sumHooks.every(h => h()) }]);
+  nextDay();
+}
+function stars(r) { const n = Math.round(r); return '★'.repeat(n) + '☆'.repeat(5 - n) + ` ${r.toFixed(1)}`; }
+
+async function nextDay() {
+  S.day++;
+  resetDay();
+  for (const h of Hooks.newDay) await h();
+  save();
+  if (S.over) return gameOver();
+  prepScreen();
+}
+async function prepScreen() {
+  if (S.over) return gameOver();
+  updateHud();
+  const blocks = []; const btns = [];
+  for (const h of Hooks.prep) { const r = await h(); if (r) { if (r.html) blocks.push(r.html); if (r.buttons) btns.push(...r.buttons); if (r.block) return; } }
+  const canOpen = S.open;
+  const html = `<h2>☀️ ${fdate(S.day).replace(/^./, c => c.toUpperCase())}</h2>
+    <p class="muted">Saldo: <b>${eur(S.money)}</b> · Reputación: <b>${stars(S.rep)}</b> · Burocracia: <b>${LEVELS[level() - 1]}</b></p>
+    ${blocks.join('')}`;
+  const v = await modal(html, [
+    ...btns,
+    { label: '📱 Móvil', cls: 'azul', value: 'phone' },
+    { label: '😴 Cerrar hoy', value: 'rest' },
+    { label: '🔓 Abrir el local', cls: 'pri', value: 'open', disabled: !canOpen },
+  ]);
+  if (v === 'phone') { openPhone(() => prepScreen()); return; }
+  if (v === 'rest') { toast('Hoy cerrado por descanso. El papeleo no descansa.', 'info'); return nextDay(); }
+  if (v === 'open') return startService();
+  if (typeof v === 'function') return v();
+  prepScreen();
+}
+async function gameOver() {
+  const o = S.over;
+  const titles = { quiebra: '💸 QUIEBRA', sancion: '⛔ CIERRE POR SANCIÓN', franquicia: '🏆 ¡SEGUNDA FRANQUICIA!' };
+  await modal(`<div style="text-align:center"><div class="logo" style="font-size:34px">${titles[o.type] || 'FIN'}</div>
+    <p style="margin-top:14px">${o.text}</p>
+    <p class="muted">Días de juego: ${S.day} · clientes servidos: ${S.stats.served} · nivel de burocracia: ${LEVELS[level() - 1]}</p></div>`,
+    [{ label: 'Nueva partida', cls: 'pri', value: true }]);
+  localStorage.removeItem(SAVE_KEY); location.reload();
+}
+
+/* =====================================================================
+   MÓVIL DEL PERSONAJE
+   ===================================================================== */
+const APPS = []; // {id, icon, name, color, badge(), render(body)}
+let phoneOnClose = null;
+function registerApp(app) { APPS.push(app); }
+function openPhone(onClose = null) {
+  phoneOnClose = onClose;
+  if (document.exitPointerLock) document.exitPointerLock();
+  $('#phone').classList.remove('hidden'); phoneHome();
+}
+function closePhone() {
+  $('#phone').classList.add('hidden');
+  const f = phoneOnClose; phoneOnClose = null;
+  if (f) f(); else if (Day.running) lockPointer();
+}
+function phoneHome() {
+  $('#pClock').textContent = Day.running ? clockStr() : '08:30';
+  const b = $('#pBody');
+  b.innerHTML = `<h3>Hola, jefe 👋</h3><p class="muted">${fdate(S.day)} · ${eur(S.money)}</p><div class="apps"></div>`;
+  const grid = b.querySelector('.apps');
+  for (const a of APPS) {
+    const el = document.createElement('button'); el.className = 'app';
+    const badge = a.badge ? a.badge() : 0;
+    el.innerHTML = `<span style="background:${a.color}">${a.icon}</span>${a.name}${badge ? `<em>${badge}</em>` : ''}`;
+    el.onclick = () => openApp(a.id);
+    grid.appendChild(el);
+  }
+}
+function openApp(id) { const a = APPS.find(x => x.id === id); const b = $('#pBody'); b.innerHTML = `<h3>${a.icon} ${a.name}</h3>`; const c = document.createElement('div'); b.appendChild(c); a.render(c); b.scrollTop = 0; }
+$('#pHome').onclick = phoneHome; $('#pClose').onclick = closePhone;
+
+registerApp({ id: 'banco', icon: '🏦', name: 'Banco', color: '#9fd3ff', render(c) {
+  c.innerHTML = `<div class="item"><h4>Saldo <span class="${S.money < 0 ? 'negt' : 'pos'}">${eur(S.money)}</span></h4><div class="muted">Banco Mediterráneo de Comisiones · cuenta negocios</div></div>
+  <h4>Últimos movimientos</h4>` + (S.bank.length ? S.bank.slice(0, 40).map(m => `<div class="item"><h4><span>${esc(m.concept)}</span><span class="${m.amount < 0 ? 'negt' : 'pos'}">${eur(m.amount)}</span></h4><div class="muted">${fshort(m.day)}</div></div>`).join('') : '<p class="muted">Sin movimientos. Bueno, la comisión de mantenimiento llegará.</p>');
+} });
+registerApp({ id: 'ajustes', icon: '⚙️', name: 'Ajustes', color: '#ddd', render(c) {
+  c.innerHTML = `<div class="item"><h4>Partida</h4><p class="muted">Se guarda sola al acabar cada día (localStorage).</p>
+  <div class="btns" style="justify-content:flex-start"><button class="btn ok" id="aSave">Guardar ahora</button><button class="btn mal" id="aReset">Borrar partida</button></div></div>`;
+  c.querySelector('#aSave').onclick = () => { save(); toast('Partida guardada.', 'good'); };
+  c.querySelector('#aReset').onclick = () => { if (confirm('¿Seguro? Se perderá todo, como un expediente sin registrar.')) { localStorage.removeItem(SAVE_KEY); location.reload(); } };
+} });
+
+/* =====================================================================
+   HUD Y BUCLE PRINCIPAL
+   ===================================================================== */
+function updateHud() {
+  const m = $('#hMoney'); m.textContent = '💶 ' + eur(S.money); m.classList.toggle('neg', S.money < 0);
+  $('#hDate').textContent = '📅 ' + fshort(S.day);
+  $('#hClock').textContent = '🕐 ' + (Day.running ? clockStr() : '--:--');
+  $('#hRep').textContent = stars(S.rep);
+  $('#hLvl').textContent = `📎 Nv ${level()}`;
+}
+let ticketT = 0;
+function updateTickets() {
+  const waiting = customers.filter(c => c.state === 'wait').sort((a, b) => a.patience - b.patience);
+  $('#tickets').innerHTML = waiting.slice(0, 7).map(c => `<div class="ticket ${c.vip ? 'vip' : ''}"><h4><span>#${c.order.id} ${esc(c.name)}${c.spot.terraza ? ' ☀️' : ''}</span><span>${eur(c.order.price)}</span></h4>
+    <div class="ings">${orderEmojis(c.order)}</div>${c.servedBy ? `<div class="who">👨‍🍳 ${esc(c.servedBy.name)} se encarga</div>` : ''}
+    <div class="bar"><i style="width:${c.patience * 100}%;background:${c.patience > .5 ? '#3aa66a' : c.patience > .25 ? '#ffcd3c' : '#d8433a'}"></i></div></div>`).join('');
+}
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  const pausedByLock = Day.running && !isTouch && !locked() && !uiBlocking();
+  $('#pausa').classList.toggle('hidden', !pausedByLock);
+  const paused = uiBlocking() || pausedByLock;
+  if (!paused) {
+    // movimiento
+    let f = 0, s = 0;
+    if (keys.KeyW || keys.ArrowUp) f += 1; if (keys.KeyS || keys.ArrowDown) f -= 1;
+    if (keys.KeyD || keys.ArrowRight) s += 1; if (keys.KeyA || keys.ArrowLeft) s -= 1;
+    f -= touch.sy; s += touch.sx;
+    const l = Math.hypot(f, s); if (l > 1) { f /= l; s /= l; }
+    const sp = player.speed * dt * (keys.ShiftLeft ? 1.4 : 1);
+    const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+    movePlayer((-sin * f + cos * s) * sp, (-cos * f - sin * s) * sp);
+    if (Day.running) updateDay(dt);
+  }
+  camera.position.set(player.x, 1.65, player.z);
+  camera.rotation.set(player.pitch, player.yaw, 0);
+  if (!paused) {
+    target = findTarget();
+    const h = target ? hintFor(target) : '';
+    const hi = $('#hint'); hi.textContent = (isTouch ? '' : 'E · ') + h; hi.classList.toggle('hidden', !h);
+  }
+  if (S && (ticketT -= dt) <= 0) { ticketT = .2; updateHud(); updateTickets(); if (hand.item) $('#hand').innerHTML = handText(); }
+  // la carne en la mano también cambia de color si estaba en la plancha (no se cocina fuera)
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+/* ==== FASES SIGUIENTES ==== */
+
+/* =====================================================================
+   ARRANQUE
+   ===================================================================== */
+const prev = loadSave();
+if (prev && !prev.over) $('#bCont').classList.remove('hidden');
+function begin(state, fresh) {
+  S = state; audio();
+  $('#title').classList.add('hidden'); $('#hud').classList.remove('hidden');
+  applyUpgrades(); updateHud();
+  if (fresh && window.introFase0) window.introFase0().then(prepScreen); else prepScreen();
+}
+$('#bNew').onclick = () => { const s = newState(); if (!window.introFase0) s.open = true; begin(s, true); };
+$('#bCont').onclick = () => begin(Object.assign(newState(), prev), false);
+window.__gtb = { get S() { return S; }, Day, customers, stations, player, spawnCustomer, serve, setHand, doInteract, get target() { return target; }, openPhone, closeModal, modal };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
