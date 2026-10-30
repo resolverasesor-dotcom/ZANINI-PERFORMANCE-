@@ -119,6 +119,13 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
 .pantalla{font:bold 46px "Courier New",monospace;background:#111;color:#ff3b30;text-align:center;border-radius:10px;padding:8px;margin:10px auto;width:220px;letter-spacing:4px;text-shadow:0 0 8px #ff3b30}
 .tlist .item{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .big{font-size:22px}
+
+.stars{color:#e0a100;letter-spacing:1px}
+.moral{height:8px;background:#ddd;border-radius:4px;overflow:hidden;margin:4px 0}
+.moral i{display:block;height:100%}
+.chat{background:#fff;border:2px solid var(--tinta);border-radius:12px;padding:8px;max-height:220px;overflow:auto;font-size:14px}
+.chat p{margin:4px 0}.chat .yo{text-align:right;color:#0f4f7d}.chat .el{color:#23201c}
+.chatin{display:flex;gap:6px;margin-top:8px}.chatin input{flex:1;font:inherit;padding:7px;border:2px solid var(--tinta);border-radius:10px}
 </style>
 </head>
 <body>
@@ -276,7 +283,7 @@ function addXp(n, why) { const l0 = level(); S.xp += n; if (level() > l0) toast(
 function addRep(d) { S.rep = clamp(S.rep + d, 0, 5); }
 
 /* hooks para que cada fase enganche su lógica */
-const Hooks = { dayStart: [], dayEnd: [], update: [], prep: [], newDay: [], interact: [], summary: [], apply: [] };
+const Hooks = { dayStart: [], dayEnd: [], update: [], prep: [], newDay: [], interact: [], summary: [], apply: [], preOpen: [] };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* =====================================================================
@@ -897,7 +904,8 @@ const Day = { running: false, t: 0, spawnT: 3, sales: 0, tips: 0, costs: 0, serv
 function resetDay() { Object.assign(Day, { running: false, t: 0, spawnT: 3, sales: 0, tips: 0, costs: 0, served: 0, lost: 0, rawServed: 0, rush: 1, log: [], vipDone: false, vipAt: -1 }); }
 function clockStr(t = Day.t) { const m = 13 * 60 + Math.floor(t / DAY_LEN * 600); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 
-function startService() {
+async function startService() {
+  for (const h of Hooks.preOpen) await h();
   Day.running = true;
   player.x = 4.2; player.z = -2.0; player.yaw = Math.PI; player.pitch = -.12;
   for (const h of Hooks.dayStart) h();
@@ -1273,15 +1281,16 @@ async function stampResult(ok, title, lines, okText = 'REGISTRADO', noText = 'DE
 }
 
 /* sede electrónica: certificado digital y caídas */
-async function sedeElectronica(org) {
+async function sedeElectronica(org, allowOffice = true) {
   if (S.flags.sedeCaida === S.day) { await modal(`<h2>🖥️ ${org}</h2><p><b>Error 503.</b> La sede electrónica no está disponible hoy por «tareas de mantenimiento programadas» que nadie programó.</p><p class="muted">Inténtelo mañana. El plazo, eso sí, no se mueve.</p>`); return false; }
   if (S.cert.validUntil < S.day) {
     const v = await modal(`<h2>🔐 Certificado caducado</h2><p>La sede dice: <i>«No se ha encontrado ningún certificado válido. Su certificado de la FNMT caducó el ${fshort(S.cert.validUntil)}.»</i></p>
       <p class="muted">Opciones: renovarlo (acreditar identidad en una oficina: se te va el día) o probar suerte con Cl@ve PIN.</p>`,
-      [{ label: 'Volver', value: 'back' }, { label: '📲 Cl@ve PIN', cls: 'azul', value: 'clave' }, { label: '🏢 Renovar en oficina', cls: 'pri', value: 'ofi' }]);
+      [{ label: 'Volver', value: 'back' }, { label: '📲 Cl@ve PIN', cls: 'azul', value: 'clave' }, { label: '🏢 Renovar en oficina' + (allowOffice ? '' : ' (no, en pleno servicio)'), cls: 'pri', value: 'ofi', disabled: !allowOffice }]);
     if (v === 'ofi') {
       S.cert.validUntil = S.day + 45; addXp(10);
       await modal(`<h2>🏢 Oficina de acreditación</h2><p>Tras dos horas de cola, una foto que no te favorece y la frase «el sistema va lento hoy», tienes certificado nuevo, válido hasta el <b>${fshort(S.cert.validUntil)}</b>.</p><p>Se te ha ido el día entero.</p>`);
+      $('#phone').classList.add('hidden'); phoneOnClose = null;
       nextDay(); return null;
     }
     if (v === 'clave') {
@@ -1389,6 +1398,393 @@ registerApp({ id: 'tramites', icon: '🏛', name: 'Trámites', color: '#ffcd3c',
     if (window.bindObligations) window.bindObligations(c);
   } });
 
+
+/* =====================================================================
+   FASE 2 · PERSONAL: CANDIDATOS, ALTAS, CONTRATOS, NPC CON IA E INSPECCIÓN
+   ===================================================================== */
+const ARQ = {
+  lento:     { label: 'Lento pero perfecto', vel: [1, 2], coc: [5, 5], sim: [2, 4], pun: [4, 5], wage: [1350, 1450], bio: 'Treinta años en el bar de su tío. No corre, pero no falla.' },
+  quemador:  { label: 'Rápido que lo quema todo', vel: [5, 5], coc: [1, 2], sim: [3, 4], pun: [3, 4], wage: [1300, 1400], bio: 'Velocidad de la luz. Punto de la carne: carbón.' },
+  tardon:    { label: 'El que llega tarde', vel: [3, 4], coc: [3, 4], sim: [4, 5], pun: [1, 1], wage: [1300, 1400], bio: 'Excelente persona. Su reloj vive en otra zona horaria.' },
+  movil:     { label: 'El que se escaquea al móvil', vel: [4, 4], coc: [3, 4], sim: [3, 4], pun: [3, 4], wage: [1300, 1380], bio: 'Influencer en ciernes. Su móvil tiene más turnos que él.' },
+  simpatico: { label: 'Encanta a la clientela', vel: [3, 3], coc: [3, 3], sim: [5, 5], pun: [3, 4], wage: [1350, 1450], bio: 'Los clientes le dejan propina solo por cómo dice «¡marchando!».' },
+  currante:  { label: 'Currante todoterreno', vel: [4, 4], coc: [4, 4], sim: [3, 3], pun: [4, 5], wage: [1550, 1700], bio: 'Hace de todo y bien. Lo sabe, y lo cobra.' },
+};
+const NOMBRES_E = ['Paco', 'Mari Carmen', 'Jonatan', 'Vanesa', 'Toni', 'Lucía', 'Rafa', 'Encarni', 'Kevin', 'Nerea', 'Chema', 'Yaiza', 'Puri', 'Borja', 'Ainhoa', 'Manolo', 'Sheila', 'Iván', 'Rosi', 'Quique'];
+const MAX_EMP = 3;
+function genCandidate() {
+  const arche = pick(Object.keys(ARQ)), a = ARQ[arche];
+  const used = new Set([...S.employees, ...S.candidates].map(e => e.name));
+  const name = pick(NOMBRES_E.filter(n => !used.has(n))) || pick(NOMBRES_E);
+  return { id: S.nextEmpId++, name, arche, vel: rint(...a.vel), coc: rint(...a.coc), sim: rint(...a.sim), pun: rint(...a.pun),
+    wage: Math.round(rint(...a.wage) / 10) * 10, naf: `46/${rint(10000000, 99999999)}/${rint(10, 99)}`,
+    look: { skin: pick([0xf1c7a0, 0xd9a37a, 0xa86b45, 0xf6d8b8]), shirt: 0xffffff, pants: 0x23201c, hair: pick([0x2b1a10, 0x6b4423, 0xe8c45a, 0x111111, 0xb8401f]), gorro: true } };
+}
+function ensureCandidates() { while (S.candidates.length < 4) S.candidates.push(genCandidate()); }
+const st5 = n => '<span class="stars">' + '★'.repeat(n) + '☆'.repeat(5 - n) + '</span>';
+const moralColor = m => m > 60 ? '#3aa66a' : m > 30 ? '#ffcd3c' : '#d8433a';
+const empWorks = e => e.startDay <= S.day && !(e.vacUntil >= S.day);
+const empBruto = e => e.wage * (e.jornada === 20 ? .5 : 1);
+
+/* ---------- formularios de personal (todos online) ---------- */
+const F_CCC = [
+  { id: 'tipo', label: 'Tipo de empresario', type: 'radio', options: [['fis', 'Persona física (autónomo)'], ['sa', 'Sociedad Anónima'], ['coop', 'Cooperativa de un solo socio']],
+    ok: 'fis', err: v => v === 'sa' ? 'No es usted una S.A. Ni una S.L. Es usted, a secas.' : 'Una cooperativa de una persona es una contradicción. Hasta para nosotros.' },
+  { id: 'conv', label: 'Convenio colectivo aplicable', type: 'select', options: [['', '— Seleccione —'], ['metal', 'Convenio del metal'], ['host', 'Convenio colectivo de hostelería de la provincia'], ['nada', 'Ninguno, aquí mando yo']],
+    ok: 'host', err: v => v === 'metal' ? 'Las planchas son de metal, pero usted es hostelería.' : 'Siempre hay convenio. Siempre.' },
+  { id: 'cnae', label: 'CNAE de la actividad', type: 'select', options: [['5610', '5610 · Restaurantes y puestos de comidas'], ['5630', '5630 · Establecimientos de bebidas']], ok: '5610', err: 'El CNAE no coincide con el de su alta en el RETA.' },
+  { id: 'mutua', label: 'Mutua de accidentes de trabajo y enfermedades profesionales', type: 'select', options: [['a', 'Mutua La Solidaria'], ['b', 'Mutua Los Tres Sellos'], ['c', 'Mutua Mi Primo']] },
+  { id: 'red', label: 'Autorización', type: 'check', text: 'Solicito autorización para actuar en el Sistema RED', ok: true, err: 'Sin autorización RED no podrá dar de alta a nadie. Ni a usted mismo, que ya lo está.' },
+];
+function fAlta(e) {
+  const fake1 = `46/${rint(10000000, 99999999)}/${rint(10, 99)}`, fake2 = e.naf.replace(/\d\d$/, d => String((+d + 7) % 90 + 10));
+  const opts = [[e.naf, e.naf], [fake1, fake1], [fake2, fake2]].sort(() => Math.random() - .5);
+  return [
+    { id: 'naf', label: `Número de afiliación (NAF) de ${e.name}`, help: `${e.name} te dejó su NAF en una servilleta: ${e.naf}`, type: 'select', options: opts, ok: e.naf, err: 'Ese NAF es de otra persona. Concretamente de un señor de Albacete.' },
+    { id: 'fecha', label: 'Fecha real de alta', type: 'radio', options: [['antes', 'Hoy, antes de que empiece a trabajar'], ['prueba', 'Cuando termine el periodo de prueba'], ['mes', 'El mes que viene, que ahora va justo']],
+      ok: 'antes', err: v => v === 'prueba' ? '¡El periodo de prueba también cotiza! El alta, ANTES de empezar.' : 'El alta es previa al inicio de la prestación de servicios. No «cuando vaya mejor».' },
+    { id: 'grupo', label: 'Grupo de cotización', type: 'select', options: [['', '— Seleccione —'], ['1', 'Grupo 1 · Ingenieros y licenciados'], ['9', 'Grupo 9 · Oficiales de tercera y especialistas (ayudante de cocina)'], ['11', 'Grupo 11 · Trabajadores menores de 18 años']],
+      ok: '9', err: v => v === '1' ? '¿Un ingeniero de patatas? Grupo 9.' : v === '11' ? `${e.name} es mayor de edad, aunque a veces no lo parezca.` : 'Indique el grupo de cotización.' },
+    { id: 'clave', label: 'Clave de contrato', type: 'select', options: [['100', '100 · Indefinido a tiempo completo'], ['200', '200 · Indefinido a tiempo parcial'], ['300', '300 · Fijo discontinuo'], ['402', '402 · Temporal por circunstancias de la producción']] },
+  ];
+}
+function fContrato(e) {
+  return [
+    { id: 'tipo', label: 'Modalidad de contrato', type: 'select', options: [['', '— Seleccione —'], ['100', 'Indefinido a tiempo completo'], ['200', 'Indefinido a tiempo parcial'], ['300', 'Fijo discontinuo'], ['402', 'Temporal por circunstancias de la producción'], ['beca', 'Becario sin beca'], ['palabra', 'De palabra, que somos de fiar']],
+      ok: v => v === e.clave, err: v => v === 'beca' ? 'El «becario sin beca» no existe. Bueno, existe, pero es ilegal.' : v === 'palabra' ? 'Los contratos verbales existen, pero luego explíqueselo a la Inspección.' : `No coincide con la clave del alta (${e.clave}). La TGSS y el SEPE se hablan... a veces.` },
+    { id: 'jornada', label: 'Jornada', type: 'radio', options: [['40', 'Completa · 40 h semanales'], ['20', 'Parcial · 20 h semanales'], ['todo', 'Lo que haga falta']],
+      ok: (v, a) => v !== 'todo' && ((a.tipo === '200') === (v === '20')), err: v => v === 'todo' ? '«Lo que haga falta» no es una jornada, es una amenaza.' : 'La jornada no cuadra con la modalidad (parcial = 20 h, completa = 40 h).' },
+    { id: 'conv', label: 'Convenio colectivo', type: 'select', options: [['', '— Seleccione —'], ['host', 'Hostelería de la provincia'], ['metal', 'Metal'], ['ninguno', 'Ninguno']], ok: 'host', err: 'El convenio debe ser el de hostelería, como en la inscripción de empresa.' },
+    { id: 'prueba', label: 'Periodo de prueba', type: 'select', options: [['conv', 'El que marque el convenio'], ['18', '18 meses'], ['siempre', 'Indefinido, como el contrato']], ok: 'conv', err: 'El periodo de prueba lo limita el convenio. 18 meses es una condena.' },
+    { id: 'causa', label: 'Causa de la temporalidad (solo contratos temporales)', type: 'select', options: [['', '— No aplica —'], ['fiestas', 'Aumento ocasional e imprevisible de la actividad (fiestas del pueblo)'], ['porque', 'Porque sí']],
+      ok: (v, a) => a.tipo !== '402' || v === 'fiestas', err: 'Un contrato temporal necesita una causa concreta. «Porque sí» no cuela desde la reforma laboral.' },
+    { id: 'firma', label: 'Firma', type: 'check', text: `Firmado por la empresa y por ${e.name} (que lo ha leído... dice)`, ok: true, err: 'El contrato debe ir firmado por las dos partes.' },
+    { id: 'com', label: 'Comunicación', type: 'check', text: 'Comunicar el contrato a Contrat@ (SEPE) dentro de los 10 días hábiles', ok: true, err: 'Hay que comunicar el contrato al SEPE. Si no, oficialmente no existe.' },
+  ];
+}
+async function doCCC() {
+  if (S.ccc) return true;
+  const p = await sedeElectronica('TGSS · Inscripción de empresario', !Day.running); if (!p) return false;
+  const r = await fillForm({ org: 'Tesorería General de la Seguridad Social · Sistema RED', title: 'Inscripción de empresario · Código de Cuenta de Cotización', intro: 'Solo se hace una vez. Como la mili, pero con más papeles.', fields: F_CCC, submit: 'Firmar y enviar' });
+  if (!r) return false;
+  if (r.errs.length) { addXp(5); await stampResult(false, 'Inscripción de empresario (CCC)', ['Defectos:', ...r.errs.map(e => '• ' + e)]); return false; }
+  S.ccc = `46/${rint(1000000, 9999999)}/${rint(10, 99)}`; addXp(30);
+  await stampResult(true, 'Inscripción de empresario (CCC)', [`Código de Cuenta de Cotización asignado: <b>${S.ccc}</b>`, 'Ya puede dar de alta a trabajadores. Y a pagar por ellos.']);
+  return true;
+}
+async function doAlta(e) {
+  if (!S.ccc) { toast('Primero inscribe la empresa en la Seguridad Social (CCC).', 'warn'); return false; }
+  const p = await sedeElectronica('Sistema RED · Afiliación', !Day.running); if (!p) return false;
+  const r = await fillForm({ org: 'Sistema RED · Afiliación e inscripción', title: `Alta de trabajador · ${e.name}`, intro: `CCC: ${S.ccc} · Primer día de trabajo: ${fdate(e.startDay)}`, fields: fAlta(e), submit: 'Enviar alta' });
+  if (!r) return false;
+  if (r.errs.length) { addXp(5); await stampResult(false, `Alta de ${e.name}`, ['Defectos:', ...r.errs.map(x => '• ' + x)]); return false; }
+  e.alta = true; e.clave = r.values.clave; e.jornada = r.values.clave === '200' ? 20 : 40; addXp(25);
+  const tarde = e.irregular > 0;
+  await stampResult(true, `Alta de ${e.name}`, [tarde ? `⚠️ Alta presentada FUERA DE PLAZO: ${e.name} ya ha trabajado ${e.irregular} día(s) sin alta. Que no se entere nadie.` : 'Alta registrada antes del inicio. Así da gusto.', `Clave de contrato: ${e.clave}`]);
+  return true;
+}
+async function doContrato(e) {
+  if (!e.alta) { toast('Primero da de alta al trabajador: el contrato debe coincidir con la clave del alta.', 'warn'); return false; }
+  const p = await sedeElectronica('Contrat@ · SEPE', !Day.running); if (!p) return false;
+  const r = await fillForm({ org: 'Servicio Público de Empleo Estatal · Contrat@', title: `Contrato de trabajo · ${e.name}`, intro: `Clave declarada en el alta: ${e.clave}. Sueldo pactado: ${eur(e.wage)}/mes brutos (jornada completa).`, fields: fContrato(e), submit: 'Comunicar contrato' });
+  if (!r) return false;
+  if (r.errs.length) { addXp(5); await stampResult(false, `Contrato de ${e.name}`, ['Defectos:', ...r.errs.map(x => '• ' + x)]); return false; }
+  e.contrato = true; addXp(25);
+  await stampResult(true, `Contrato de ${e.name}`, ['Contrato comunicado a Contrat@. Copia básica entregada a la representación legal de los trabajadores (que no existe).']);
+  return true;
+}
+function hire(id) {
+  if (S.employees.length >= MAX_EMP) { toast(`Máximo ${MAX_EMP} empleados: la cocina no da para más.`, 'warn'); return; }
+  const i = S.candidates.findIndex(c => c.id === id); if (i < 0) return;
+  const e = S.candidates.splice(i, 1)[0];
+  Object.assign(e, { startDay: S.day + 1, alta: false, contrato: false, clave: null, jornada: 40, moral: 70, irregular: 0, sinContrato: 0, diasTrabajados: 0, vacUntil: 0, hiredDay: S.day, mesDias: 0 });
+  S.employees.push(e);
+  toast(`🤝 ${e.name} empieza el ${fdate(e.startDay)}. ¡Recuerda: CCC, alta ANTES de su primer día y contrato!`, 'warn', 5000);
+}
+async function fire(e) {
+  const fin = Math.round(empBruto(e) / 30 * 12 * 100) / 100;
+  const v = await modal(`<h2>✂️ Despedir a ${esc(e.name)}</h2><p>Finiquito y baja en la Seguridad Social (dentro de los 3 días siguientes). Coste estimado: <b>${eur(fin)}</b> (vacaciones no disfrutadas, partes proporcionales y un abrazo).</p>`,
+    [{ label: 'Mejor no', value: false }, { label: 'Despedir', cls: 'mal', value: true }]);
+  if (!v) return;
+  S.employees.splice(S.employees.indexOf(e), 1);
+  if (fin > 0 && e.startDay <= S.day) money(-fin, `Finiquito ${e.name}`);
+  toast(`${e.name}: «${pick(['Pues vale. Me voy al chiringuito de enfrente.', 'Me piro, vampiro.', 'Ya te llamará mi abogado. Es mi primo.'])}»`, 'info', 3500);
+}
+
+/* ---------- app Personal ---------- */
+registerApp({ id: 'personal', icon: '👥', name: 'Personal', color: '#8fe0a8',
+  badge: () => S.employees.filter(e => !e.alta || !e.contrato).length + (S.employees.length && !S.ccc ? 1 : 0),
+  render(c) {
+    ensureCandidates();
+    const emp = S.employees.map(e => `<div class="item"><h4><span>👨‍🍳 ${esc(e.name)}</span><span>${eur(empBruto(e))}/mes</span></h4>
+      <div class="muted">${ARQ[e.arche].label} · ${e.startDay > S.day ? 'empieza el ' + fshort(e.startDay) : e.vacUntil >= S.day ? 'de vacaciones hasta el ' + fshort(e.vacUntil) : 'en plantilla'}</div>
+      <div>Vel ${st5(e.vel)} Coc ${st5(e.coc)}<br>Sim ${st5(e.sim)} Pun ${st5(e.pun)}</div>
+      <div class="moral"><i style="width:${e.moral}%;background:${moralColor(e.moral)}"></i></div>
+      <div>${S.ccc ? '<span class="tag ok">CCC</span>' : '<span class="tag no">SIN CCC</span>'} ${e.alta ? '<span class="tag ok">ALTA SS</span>' : '<span class="tag no">SIN ALTA</span>'} ${e.contrato ? '<span class="tag ok">CONTRATO</span>' : '<span class="tag no">SIN CONTRATO</span>'}</div>
+      <div class="btns" style="justify-content:flex-start;margin-top:6px">
+        ${!S.ccc ? `<button class="btn pri" data-a="ccc">Inscribir empresa (CCC)</button>` : ''}
+        ${S.ccc && !e.alta ? `<button class="btn pri" data-a="alta" data-e="${e.id}">Dar de alta</button>` : ''}
+        ${e.alta && !e.contrato ? `<button class="btn pri" data-a="contrato" data-e="${e.id}">Contrato</button>` : ''}
+        <button class="btn mal" data-a="fire" data-e="${e.id}">Despedir</button></div></div>`).join('') || '<p class="muted">Nadie. Tú solo contra el mundo (y contra la plancha).</p>';
+    const cand = S.candidates.map(k => `<div class="item"><h4><span>${esc(k.name)}</span><span>${eur(k.wage)}/mes</span></h4>
+      <div class="muted">${ARQ[k.arche].label}. ${ARQ[k.arche].bio}</div>
+      <div>Vel ${st5(k.vel)} Coc ${st5(k.coc)}<br>Sim ${st5(k.sim)} Pun ${st5(k.pun)}</div>
+      <div class="btns" style="justify-content:flex-start;margin-top:6px"><button class="btn ok" data-a="hire" data-e="${k.id}" ${S.employees.length >= MAX_EMP ? 'disabled' : ''}>Contratar</button></div></div>`).join('');
+    c.innerHTML = `<p class="muted">CCC de la empresa: <b>${S.ccc || 'sin inscribir'}</b></p><h4>Plantilla (${S.employees.length}/${MAX_EMP})</h4>${emp}
+      <h4>📌 Tablón de candidatos</h4>${cand}<div class="btns" style="justify-content:flex-start"><button class="btn azul" data-a="refresh">Nuevo anuncio en el tablón (25 €)</button></div>`;
+    const rer = () => openApp('personal');
+    c.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
+      const e = S.employees.find(x => x.id === +b.dataset.e);
+      switch (b.dataset.a) {
+        case 'ccc': await doCCC(); break;
+        case 'alta': await doAlta(e); break;
+        case 'contrato': await doContrato(e); break;
+        case 'fire': await fire(e); break;
+        case 'hire': hire(+b.dataset.e); break;
+        case 'refresh': money(-25, 'Anuncio de empleo en el tablón del mercado'); S.candidates = []; ensureCandidates(); break;
+      }
+      if (!$('#phone').classList.contains('hidden')) rer();
+    });
+  } });
+
+/* ---------- antes de abrir: ¿quién viene hoy a trabajar? ---------- */
+Hooks.preOpen.push(async () => {
+  for (const e of S.employees) {
+    e.today = false;
+    if (!empWorks(e)) continue;
+    if (!e.alta || !S.ccc) {
+      const v = await modal(`<h2>⚠️ ${esc(e.name)} ha llegado</h2><p>«Buenos días, jefe. ¿Empiezo?»</p><p><b>${esc(e.name)} no tiene el alta en la Seguridad Social.</b> Si trabaja hoy y aparece la Inspección de Trabajo, la multa puede ser enorme.</p>`,
+        [{ label: 'Mandarlo a casa', cls: 'ok', value: false }, { label: 'Que trabaje (ya lo arreglaré)', cls: 'mal', value: true }]);
+      if (!v) { e.moral = clamp(e.moral - 5, 0, 100); continue; }
+      e.irregular++;
+    }
+    if (!e.contrato) e.sinContrato++;
+    e.today = true;
+  }
+});
+
+/* ---------- NPC en cocina ---------- */
+const workers = [];
+const KITCHEN_FRONT = -2.0, KITCHEN_BACK = -4.25, CONNECT = [-7.0, 5.4];
+function kitchenPath(from, to) {
+  const corr = z => z < -3.1 ? 'b' : 'f';
+  if (corr(from.z) === corr(to[1])) return [to];
+  const cx = CONNECT.reduce((a, x) => Math.abs(x - from.x) + Math.abs(x - to[0]) < Math.abs(a - from.x) + Math.abs(a - to[0]) ? x : a);
+  return [[cx, from.z], [cx, to[1]], to];
+}
+function spawnWorkers() {
+  let i = 0;
+  for (const e of S.employees) {
+    if (!e.today) continue;
+    const g = makePerson(e.look); g.position.set(5.4, 0, KITCHEN_FRONT + i * .1); g.visible = false; scene.add(g);
+    const late = e.arche === 'tardon' ? rnd(25, 70) : Math.random() < (5 - e.pun) * .06 ? rnd(12, 35) : 0;
+    const w = { e, g, state: 'absent', arriveT: late, path: [], job: null, t: 0, phoneT: 0, bubble: null, walk: 0, talkedToday: 0 };
+    const tag = textSprite(e.name, { h: .16, bg: '#fff' }); tag.position.y = 2.35; g.add(tag);
+    hitbox(.7, 1.9, .6, 0, .95, 0, { t: 'worker', w }, g);
+    workers.push(w); i++;
+  }
+}
+function setBubble(w, txt) { if (w.bubble) w.g.remove(w.bubble); w.bubble = null; if (txt) { w.bubble = textSprite(txt, { h: .24, bg: '#fff' }); w.bubble.position.y = 2.6; w.g.add(w.bubble); } }
+function speedOf(w) { return (.55 + w.e.vel * .2) * (.6 + w.e.moral / 250); }
+function workerWalk(w, dt) {
+  const tgt = w.path[0]; if (!tgt) return true;
+  const p = w.g.position, dx = tgt[0] - p.x, dz = tgt[1] - p.z, d = Math.hypot(dx, dz), sp = 2.4 * dt * Math.min(1.3, speedOf(w));
+  w.walk += dt * 10; const sw = Math.sin(w.walk) * .5; w.g.userData.legs[0].rotation.x = sw; w.g.userData.legs[1].rotation.x = -sw;
+  if (d <= sp) { p.x = tgt[0]; p.z = tgt[1]; w.path.shift(); if (!w.path.length) w.g.userData.legs.forEach(l => l.rotation.x = 0); return !w.path.length; }
+  p.x += dx / d * sp; p.z += dz / d * sp; w.g.rotation.y = Math.atan2(dx, dz); return false;
+}
+function cookItems(w, order) {
+  const e = w.e, items = [{ type: 'pan' }];
+  const burnP = (5 - e.coc) * .07 + (e.arche === 'quemador' ? .3 : 0) - (w.careful || 0);
+  const rawP = (5 - e.coc) * .025;
+  for (let i = 0; i < order.items.carne; i++) items.push({ type: 'carne', cook: Math.random() < burnP ? 1.3 : Math.random() < rawP ? .3 : .8 });
+  for (const k in order.items) if (k !== 'carne') { if (Math.random() < (5 - e.coc) * .035) continue; items.push({ type: k, cook: 1.5 }); }
+  items.push({ type: 'pan' });
+  return items;
+}
+function updateWorkers(dt) {
+  for (const w of workers) {
+    const e = w.e;
+    if (w.state === 'absent') {
+      if (Day.t >= w.arriveT) {
+        w.state = 'idle'; w.g.visible = true;
+        if (w.arriveT > 5) { toast(`⏰ ${e.name} llega tarde: «${pick(['Es que había un atasco en la rotonda', 'Se me ha muerto el despertador. Otra vez', 'He tenido que llevar al perro al veterinario... del perro', 'La procesión, que cortaba la calle'])}»`, 'warn', 3500); e.lateCount = (e.lateCount || 0) + 1; }
+      }
+      continue;
+    }
+    // móvil
+    if (w.state === 'phone') { w.phoneT -= dt; if (w.phoneT <= 0) { w.state = w.job ? 'cook' : 'idle'; setBubble(w, null); } continue; }
+    const phoneP = (e.arche === 'movil' ? .02 * (1.4 - e.moral / 100) : .0015 * (1.2 - e.moral / 100)) * dt;
+    if (w.state !== 'deliver' && Math.random() < phoneP) { w.prevState = w.state; w.state = 'phone'; w.phoneT = rnd(10, 22); setBubble(w, '📱'); continue; }
+    if (w.state === 'idle') {
+      const c = customers.filter(c => c.state === 'wait' && !c.servedBy && c.spot.inside).sort((a, b) => a.patience - b.patience)[0];
+      if (c) {
+        w.job = c; c.servedBy = e; w.state = 'toGrill'; const gx = -5.75 + (workers.indexOf(w) % 2) * .9;
+        w.path = kitchenPath(w.g.position, [gx, KITCHEN_BACK]);
+        for (const k in c.order.items) Day.costs += ING[k].cost * c.order.items[k];
+        Day.costs += ING.pan.cost * 2;
+        w.t = (9 + Object.keys(c.order.items).length * 1.5 + (c.order.items.carne - 1) * 2) / speedOf(w);
+      }
+    } else if (w.state === 'toGrill') { if (workerWalk(w, dt)) { w.state = 'cook'; w.g.rotation.y = Math.PI; setBubble(w, '🔥'); } }
+    else if (w.state === 'cook') {
+      if (!w.job || w.job.state !== 'wait') { w.job = null; w.state = 'idle'; setBubble(w, null); continue; }
+      w.t -= dt; w.g.userData.arms[1].rotation.x = -1 + Math.sin(performance.now() / 100) * .3;
+      if (w.t <= 0) { w.g.userData.arms[1].rotation.x = 0; w.items = cookItems(w, w.job.order); w.state = 'deliver'; setBubble(w, '🍔'); w.path = kitchenPath(w.g.position, [clamp(w.job.spot.x, -6.6, 4.5), KITCHEN_FRONT + .3]); }
+    } else if (w.state === 'deliver') {
+      if (workerWalk(w, dt)) {
+        setBubble(w, null);
+        if (w.job && w.job.state === 'wait') { w.g.rotation.y = 0; serve(w.job, w.items, { name: e.name, id: e.id, tipMul: .7 + e.sim * .12 }); e.served = (e.served || 0) + 1; }
+        else toast(`${e.name}: «¿Y el cliente? Pues me la como yo.»`, 'info', 1800);
+        w.job = null; w.state = 'idle';
+      }
+    }
+  }
+}
+function clearWorkers() {
+  for (const w of workers) { scene.remove(w.g); for (let k = hits.length - 1; k >= 0; k--) if (hits[k].userData.act.w === w) hits.splice(k, 1); }
+  workers.length = 0;
+  for (const c of customers) c.servedBy = null;
+}
+Hooks.dayStart.push(spawnWorkers);
+Hooks.update.push(updateWorkers);
+window.__workers = workers;
+Hooks.dayEnd.push(() => {
+  const worked = workers.map(w => w.e);
+  clearWorkers();
+  for (const e of S.employees) {
+    if (e.today) { e.diasTrabajados++; e.moral = clamp(e.moral + (Day.served > 25 ? -4 : 1), 0, 100); }
+    e.today = false;
+  }
+  if (!worked.length) return null;
+  return { html: `<p class="muted">Equipo de hoy: ${worked.map(e => `${esc(e.name)} (${e.served || 0} servidas)`).join(', ')}.</p>` };
+});
+
+/* ---------- conversaciones: «IA» local por personalidad y moral ---------- */
+const DIALOGO = {
+  saludo: { lento: ['Aquí, a mi ritmo, jefe.', 'Despacito y buena letra.'], quemador: ['¡Dime, dime, que tengo cinco en la plancha!', '¡Volando voy!'], tardon: ['¡Jefe! Que hoy he llegado casi puntual, ¿eh?'], movil: ['Un segundo, que contesto esto... ¿Sí?'], simpatico: ['¡Hombre, el jefe! ¿Qué tal la mañana?'], currante: ['A mandar, que para eso estamos.'] },
+  felicitar: { lento: ['Gracias. Treinta años de oficio, no se notan, se saborean.'], quemador: ['¡Olé! Y eso que esta vez solo se me ha chamuscado un poco.'], tardon: ['¡Me has alegrado el día! Y eso que acaba de empezar... para mí.'], movil: ['¡Gracias! Lo subo a mis stories.'], simpatico: ['¡Ay, que me pongo colorado! Te invito a un café.'], currante: ['Ya lo sé, pero se agradece oírlo.'] },
+  renir: { lento: ['Hombre, tampoco te pongas así... Lo bueno se hace esperar.'], quemador: ['Vale, vale, no me ralles. Bajo el fuego.'], tardon: ['Ya, ya lo sé... es que el autobús...'], movil: ['Ostras, perdona, era mi madre. Lo guardo.'], simpatico: ['Uf. Vale. Lo pillo.'], currante: ['Pues si no te gusta, hazlo tú. ...Perdona, que es el estrés.'] },
+  prisa: { lento: ['Más rápido no puedo sin que pierda calidad, jefe.'], quemador: ['¿MÁS rápido? ¡Agárrate!'], tardon: ['¡Que sí, jefe, que ya voy!'], movil: ['Voy, voy, voy... (sigue mirando el móvil)'], simpatico: ['¡Marchando, que esto lo saco yo en un pispás!'], currante: ['Ya voy a tope, pero tiro un poco más.'] },
+  charlar: { lento: ['¿Sabes que antes una hamburguesa costaba 200 pesetas?'], quemador: ['¿Has visto el partido? ¡Qué golazo!'], tardon: ['Pues mi cuñado tiene un apartamento en Benidorm...'], movil: ['Mira este vídeo de un gato. Es buenísimo.'], simpatico: ['¿Sabes que la señora del 3º viene por mí? Je, je.'], currante: ['Oye, la campana extractora hace un ruido raro. Habrá que mirarla.'] },
+  sueldo: { _: ['¿Subida? Ya hablaremos cuando revisen el convenio. O cuando me toque la lotería.', 'Lo que pone el convenio, jefe. Ni un euro menos.'] },
+  vacaciones: { _: ['¿Vacaciones? ¡En agosto, como todo el mundo!', 'Treinta días naturales, jefe. Lo dice el Estatuto.'] },
+  confuso: { _: ['¿Mande?', 'No te he entendido, jefe, con el ruido de la campana...', 'Ajá. Sí. Claro. ...¿Qué?'] },
+};
+function say(kind, e) { const d = DIALOGO[kind]; return pick(d[e.arche] || d._ || ['...']); }
+function intentOf(txt) {
+  const t = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  if (/(bien|genial|gracias|crack|maquina|ole|bravo|perfect|buen trabajo|enhorabuena|felicid|fenomen|top|idolo)/.test(t)) return 'felicitar';
+  if (/(vacacion|agosto|libre|fiesta|puente)/.test(t)) return 'vacaciones';
+  if (/(sueldo|subida|dinero|cobrar|nomina|pagar)/.test(t)) return 'sueldo';
+  if (/(movil|vago|lento|quemad|inutil|mal|desastre|despid|espabila|tarde|crud)/.test(t)) return 'renir';
+  if (/(prisa|rapido|corre|venga|vamos|dale|ya|plancha|carne|pedido|comanda)/.test(t)) return 'prisa';
+  if (/(hola|que tal|como estas|partido|tiempo|familia|tal)/.test(t)) return 'charlar';
+  return 'confuso';
+}
+function applyIntent(w, intent) {
+  const e = w.e; let dm = 0;
+  w.talkedToday++;
+  const tired = w.talkedToday > 4 ? .5 : 1;
+  switch (intent) {
+    case 'felicitar': dm = (e.arche === 'simpatico' ? 14 : e.arche === 'currante' ? 6 : 10) * tired; if (w.talkedToday > 6) dm = -2; break;
+    case 'renir':
+      dm = e.arche === 'currante' ? -16 : e.arche === 'lento' ? -12 : -8;
+      if (w.state === 'phone') { w.phoneT = 0; dm += 4; }
+      if (e.arche === 'quemador') w.careful = .2; // baja el fuego un rato
+      break;
+    case 'prisa': dm = e.arche === 'lento' ? -6 : -2; w.boost = 1; if (w.state === 'cook') w.t *= .8; if (w.state === 'phone') w.phoneT = 0; if (e.arche === 'quemador') w.careful = -.1; break;
+    case 'charlar': dm = e.arche === 'movil' || e.arche === 'simpatico' ? 6 : 3; break;
+    case 'sueldo': dm = -1; break;
+    case 'vacaciones': dm = 2; break;
+  }
+  e.moral = clamp(e.moral + dm, 0, 100);
+  return dm;
+}
+async function talkTo(w) {
+  const e = w.e, log = [`<p class="el"><b>${esc(e.name)}:</b> ${say('saludo', e)}</p>`];
+  const render = card => {
+    card.querySelector('.chat').innerHTML = log.join(''); card.querySelector('.chat').scrollTop = 1e6;
+    card.querySelector('.moral i').style.width = e.moral + '%'; card.querySelector('.moral i').style.background = moralColor(e.moral);
+  };
+  await modal(`<h2>💬 ${esc(e.name)} <span class="muted">· ${ARQ[e.arche].label}</span></h2>
+    <div class="muted">Moral</div><div class="moral"><i></i></div>
+    <div class="chat"></div>
+    <div class="btns" style="justify-content:flex-start">
+      <button class="btn" data-i="prisa">🙏 Pedir prisa</button><button class="btn ok" data-i="felicitar">👏 Felicitar</button>
+      <button class="btn mal" data-i="renir">😠 Reñir</button><button class="btn azul" data-i="charlar">💬 Charlar</button></div>
+    <div class="chatin"><input id="chatTxt" placeholder="Dile algo con tus palabras..." maxlength="120"><button class="btn pri" id="chatGo">Decir</button></div>`,
+    [{ label: 'Volver al tajo', cls: 'pri', value: true }],
+    card => {
+      render(card);
+      const talk = (intent, txt) => {
+        log.push(`<p class="yo"><b>Tú:</b> ${esc(txt)}</p>`);
+        const dm = applyIntent(w, intent);
+        let ans = say(intent, e);
+        if (e.moral < 20 && intent !== 'felicitar') ans += ' ...Estoy por irme, ¿eh?';
+        log.push(`<p class="el"><b>${esc(e.name)}:</b> ${ans} <span class="muted">(moral ${dm >= 0 ? '+' : ''}${Math.round(dm)})</span></p>`);
+        render(card);
+      };
+      const TXT = { prisa: '¡Venga, que se acumulan las comandas!', felicitar: '¡Muy bien, máquina!', renir: '¡Así no se puede trabajar!', charlar: '¿Qué tal todo?' };
+      card.querySelectorAll('[data-i]').forEach(b => b.onclick = () => talk(b.dataset.i, TXT[b.dataset.i]));
+      const go = () => { const i = card.querySelector('#chatTxt'); const t = i.value.trim(); if (!t) return; i.value = ''; talk(intentOf(t), t); };
+      card.querySelector('#chatGo').onclick = go;
+      card.querySelector('#chatTxt').addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') go(); });
+    });
+  if (Day.running) lockPointer();
+}
+Hooks.interact.push({
+  hint: a => a.t === 'worker' ? `Hablar con ${a.w.e.name}${a.w.state === 'phone' ? ' (📱 está con el móvil)' : ''}` : null,
+  act: a => { if (a.t !== 'worker') return false; talkTo(a.w); return true; },
+});
+/* al final del día: quien tenga la moral por los suelos, se va */
+Hooks.newDay.push(async () => {
+  for (const e of [...S.employees]) {
+    if (e.moral < 12 && Math.random() < .5) {
+      S.employees.splice(S.employees.indexOf(e), 1);
+      await modal(`<h2>🚪 ${esc(e.name)} se despide</h2><p>«Mira, jefe, me piro. Me han ofrecido trabajo en el chiringuito de enfrente. Allí por lo menos me hablan bonito.»</p><p class="muted">Ojo: la baja en la Seguridad Social hay que tramitarla igualmente (te la hace el sistema, por esta vez).</p>`);
+    }
+  }
+  if (S.day % 7 === 0) { S.candidates = []; ensureCandidates(); }
+});
+
+/* ---------- Inspección de Trabajo ---------- */
+async function inspeccionTrabajo() {
+  const lines = []; let total = 0, grave = false;
+  const plantilla = S.employees.filter(e => e.startDay <= S.day);
+  for (const e of plantilla) {
+    if (e.irregular > 0) { lines.push(`${esc(e.name)}: ha trabajado ${e.irregular} día(s) SIN ALTA en la Seguridad Social → <b>${eur(10000)}</b> (falta grave) + cuotas atrasadas`); total += 10000 + empBruto(e) * .38 * e.irregular / 30; grave = true; e.irregular = 0; }
+    if (e.sinContrato > 0 && !e.contrato) { lines.push(`${esc(e.name)}: sin contrato por escrito ni comunicado → <b>${eur(1500)}</b>`); total += 1500; e.sinContrato = 0; }
+  }
+  if (Hooks.inspeccion) for (const h of Hooks.inspeccion) { const r = h(plantilla); if (r) { lines.push(...r.lines); total += r.total; grave = grave || r.grave; } }
+  if (!plantilla.length) lines.push('No tiene usted empleados. El inspector, decepcionado, se pide una hamburguesa.');
+  if (!lines.length || total === 0) {
+    addXp(30);
+    await modal(`<h2>🕵️ Inspección de Trabajo</h2><div class="paper"><div class="org"><span>Inspección de Trabajo y Seguridad Social</span><span>${fshort(S.day)}</span></div>
+      <h3>Acta de inspección</h3><p>${lines.join('<br>') || 'Altas, contratos y registros en regla. El inspector parece casi decepcionado.'}</p><div class="stamp ok">CONFORME</div></div>`);
+    return;
+  }
+  total = Math.round(total * 100) / 100;
+  money(-total, 'Acta de infracción · Inspección de Trabajo');
+  if (grave) S.sanciones++;
+  addRep(-.3); SFX.stamp();
+  await modal(`<h2>🕵️ Inspección de Trabajo</h2><div class="paper"><div class="org"><span>Inspección de Trabajo y Seguridad Social</span><span>${fshort(S.day)}</span></div>
+    <h3>Acta de infracción</h3>${lines.map(l => `<p>• ${l}</p>`).join('')}<p><b>Total: ${eur(total)}</b></p><div class="stamp no">SANCIÓN</div></div>
+    <p class="muted">Sanciones graves acumuladas: ${S.sanciones}/3. A la tercera, cierre del local.</p>`);
+  if (S.sanciones >= 3) S.over = { type: 'sancion', text: 'Tres sanciones graves. El Ayuntamiento precinta el local con una cinta muy bonita, eso sí.' };
+}
+Hooks.prep.push(async () => {
+  if (!S.open || S.flags.inspDay === S.day) return null;
+  const irregular = S.employees.some(e => e.irregular > 0 || (e.sinContrato > 0 && !e.contrato));
+  const p = !S.employees.length ? 0 : irregular ? .2 : .06;
+  if (S.flags.forceInsp || Math.random() < p) {
+    S.flags.forceInsp = false; S.flags.inspDay = S.day;
+    await modal(`<h2>🔔 ¡Ding-dong!</h2><p>Una señora con carpeta y gafas de leer: <i>«Buenos días. Inspección de Trabajo. ¿Me enseña las altas, los contratos y el registro de jornada?»</i></p>`, [{ label: 'Pase, pase... 😰', cls: 'pri', value: true }]);
+    await inspeccionTrabajo();
+    if (S.over) { gameOver(); return { block: true }; }
+  }
+  return null;
+});
+
 /* ==== FASES SIGUIENTES ==== */
 
 /* =====================================================================
@@ -1404,7 +1800,7 @@ function begin(state, fresh) {
 }
 $('#bNew').onclick = () => { const s = newState(); if (!window.introFase0) s.open = true; begin(s, true); };
 $('#bCont').onclick = () => begin(Object.assign(newState(), prev), false);
-window.__gtb = { get S() { return S; }, Day, customers, stations, player, spawnCustomer, serve, setHand, doInteract, get target() { return target; }, openPhone, closeModal, modal };
+window.__gtb = { get S() { return S; }, workers: () => window.__workers, Day, customers, stations, player, spawnCustomer, serve, setHand, doInteract, get target() { return target; }, openPhone, closeModal, modal };
 requestAnimationFrame(frame);
 </script>
 </body>
