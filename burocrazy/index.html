@@ -126,6 +126,19 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
 .chat{background:#fff;border:2px solid var(--tinta);border-radius:12px;padding:8px;max-height:220px;overflow:auto;font-size:14px}
 .chat p{margin:4px 0}.chat .yo{text-align:right;color:#0f4f7d}.chat .el{color:#23201c}
 .chatin{display:flex;gap:6px;margin-top:8px}.chatin input{flex:1;font:inherit;padding:7px;border:2px solid var(--tinta);border-radius:10px}
+
+@media (max-width:640px){
+  #topbar{max-width:calc(100% - 156px);gap:4px}
+  .chip{font-size:12px;padding:3px 6px;border-width:2px;box-shadow:0 3px 0 rgba(0,0,0,.25)}
+  #tickets{width:142px;gap:4px;max-height:52vh}
+  .ticket{font-size:11px;padding:4px 5px;border-width:2px}
+  .ticket h4{font-size:11px}.ticket .ings{font-size:13px;letter-spacing:0}
+  .ticket:nth-child(n+5){display:none}
+  #hand{bottom:172px;font-size:12px;padding:4px 8px;border-width:2px}
+  #hint{font-size:13px}
+  .card{padding:14px 14px}
+  .card h2{font-size:20px}
+}
 </style>
 </head>
 <body>
@@ -137,6 +150,7 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
     <div class="chip" id="hClock">13:00</div>
     <div class="chip" id="hRep">★★★☆☆</div>
     <div class="chip" id="hLvl">Nv 1</div>
+    <div class="chip" id="hPlazos">📌 0</div>
   </div>
   <div id="tickets"></div>
   <div id="cross"></div>
@@ -248,6 +262,13 @@ function toast(msg, cls = 'info', ms = 2600) {
   const box = $('#toasts'); box.appendChild(el);
   while (box.children.length > 4) box.firstChild.remove();
   setTimeout(() => el.remove(), ms);
+}
+
+/* avisos del móvil: en servicio salen como toast; fuera, se acumulan para la pantalla de la mañana */
+function notify(msg, cls = 'info') {
+  SFX.notif();
+  if (Day.running || !S) { toast(msg, cls, 4500); return; }
+  (S.flags.notifs = S.flags.notifs || []).push({ msg, cls });
 }
 
 /* =====================================================================
@@ -746,7 +767,7 @@ const QUEJAS_MAL = ['¡Esto no es lo que he pedido!', 'Yo pedí otra cosa, pero 
 const FELIZ = ['¡Bonísima, oiga!', '¡Qué maravilla, mejor que la de mi suegra!', '¡De diez! Vuelvo mañana.', '¡Esto sí que es una hamburguesa!'];
 
 const spotsBarra = [-6.6, -4.9, -3.2, -1.5, .2, 1.9, 3.6].map(x => ({ x, z: -.15, face: Math.PI, c: null, inside: true }));
-const spotsTerraza = [-6, -3.5, 3.5, 6].map(x => ({ x, z: 9.6, face: 0, c: null, inside: false, terraza: true }));
+const spotsTerraza = [-6, -3.5, 3.5, 6].map(x => ({ x, z: 10.4, face: Math.PI, c: null, inside: false, terraza: true }));
 const customers = [];
 let orderSeq = 1;
 
@@ -811,7 +832,7 @@ function spawnCustomer(opts = {}) {
   const c = {
     g, spot, name: opts.name || pick(NOMBRES_C), order: genOrder(vip), state: 'in', vip,
     patience: 1, patienceMax: (vip ? 50 : rnd(65, 95)) * (spot.terraza ? 1.15 : 1), waited: 0,
-    path: spot.terraza ? [[spot.x, 11], [spot.x, spot.z]] : [[0, 7], [0, 1.2], [spot.x, 1.2], [spot.x, spot.z]],
+    path: spot.terraza ? [[spot.x, 12], [spot.x, spot.z]] : [[0, 7], [0, 1.2], [spot.x, 1.2], [spot.x, spot.z]],
     bar: barSprite(), tag: null, servedBy: null, walk: 0,
   };
   spot.c = c;
@@ -833,7 +854,7 @@ function walkAlong(c, dt) {
 function leave(c, mood) {
   c.state = 'out'; c.tag.visible = false; c.bar.visible = false; c.spot.c = null;
   const sp = c.spot;
-  c.path = sp.terraza ? [[sp.x, 11], [0, 15]] : [[sp.x, 1.2], [0, 1.2], [0, 7], [0, 15]];
+  c.path = sp.terraza ? [[sp.x, 12], [0, 15]] : [[sp.x, 1.2], [0, 1.2], [0, 7], [0, 15]];
   if (mood) { const b = textSprite(mood, { h: .25, bg: '#fff' }); b.position.y = 2.4; c.g.add(b); }
   for (const h of hits) if (h.userData.act.c === c) h.userData.disabled = true;
 }
@@ -1013,6 +1034,9 @@ async function prepScreen() {
   const blocks = []; const btns = [];
   for (const h of Hooks.prep) { const r = await h(); if (r) { if (r.html) blocks.push(r.html); if (r.buttons) btns.push(...r.buttons); if (r.block) return; } }
   const canOpen = S.open;
+  const nts = S.flags.notifs || [];
+  if (nts.length) blocks.unshift(`<div class="item"><h4>📱 Notificaciones (${nts.length})</h4>${nts.slice(-8).map(n => `<div class="toast ${n.cls}" style="animation:none;margin:4px 0;box-shadow:none;border-width:2px;text-align:left">${n.msg}</div>`).join('')}</div>`);
+  S.flags.notifs = [];
   const html = `<h2>☀️ ${fdate(S.day).replace(/^./, c => c.toUpperCase())}</h2>
     <p class="muted">Saldo: <b>${eur(S.money)}</b> · Reputación: <b>${stars(S.rep)}</b> · Burocracia: <b>${LEVELS[level() - 1]}</b></p>
     ${blocks.join('')}`;
@@ -1024,7 +1048,7 @@ async function prepScreen() {
     { label: '🔓 Abrir el local', cls: 'pri', value: 'open', disabled: !canOpen },
   ]);
   if (v === 'phone') { openPhone(() => prepScreen()); return; }
-  if (v === 'rest') { toast('Hoy cerrado por descanso. El papeleo no descansa.', 'info'); return nextDay(); }
+  if (v === 'rest') { notify('😴 Ayer cerrado por descanso. El papeleo no descansa.'); return nextDay(); }
   if (v === 'open') return startService();
   if (v === 'walk') { walking = true; lockPointer(); return; }
   if (typeof v === 'function') return v();
@@ -1092,6 +1116,8 @@ function updateHud() {
   $('#hClock').textContent = '🕐 ' + (Day.running ? clockStr() : '--:--');
   $('#hRep').textContent = stars(S.rep);
   $('#hLvl').textContent = `📎 Nv ${level()}`;
+  const pl = window.plazosInfo ? window.plazosInfo() : { n: 0, late: 0 };
+  const hp = $('#hPlazos'); hp.textContent = `📌 ${pl.n} plazo${pl.n === 1 ? '' : 's'}${pl.late ? ` · ${pl.late} vencido${pl.late > 1 ? 's' : ''}` : ''}`; hp.classList.toggle('neg', pl.late > 0);
 }
 let ticketT = 0;
 function updateTickets() {
@@ -1785,6 +1811,419 @@ Hooks.prep.push(async () => {
   return null;
 });
 
+
+/* =====================================================================
+   FASE 3 · CALENDARIO FISCAL Y LABORAL, ASESOR, EVENTOS Y PROGRESIÓN
+   ===================================================================== */
+const TIPO = { iva: .10, ivaGen: .21, irpfNomina: .08, ssEmpresa: .314, ssTrab: .0648, retAlquiler: .19 };
+const ALQUILER = 1000, SUMINISTROS = 300, ASESOR_CUOTA = 120;
+const retaCuota = () => S.reta.tarifaPlana ? 80 : 294;
+function A() {
+  if (!S.acc.q) Object.assign(S.acc, { q: { ivaRep: 0, ivaSop: 0, irpf: 0, ret115: 0 }, y: { ingresos: 0, gastos: 0, pagos130: 0, had111: false, had115: false }, compensar: 0 });
+  return S.acc;
+}
+const MODELOS = {
+  '303': 'Modelo 303 · Autoliquidación de IVA', '130': 'Modelo 130 · Pago fraccionado IRPF', '111': 'Modelo 111 · Retenciones de trabajo',
+  '115': 'Modelo 115 · Retenciones del alquiler', '390': 'Modelo 390 · Resumen anual de IVA', '190': 'Modelo 190 · Resumen anual de retenciones',
+  '180': 'Modelo 180 · Resumen anual retenciones alquiler', 'RLC': 'RLC/RNT · Liquidación de cotizaciones', 'NOM': 'Nóminas',
+};
+const MODEL_DISTRACT = ['303', '130', '111', '115', '390', '190', '036', '347', 'RLC'];
+/* gasto con IVA soportado */
+function gasto(base, ivaTipo, concepto, extra = 0) {
+  const a = A(); const iva = Math.round(base * ivaTipo * 100) / 100;
+  money(-(base + iva - extra), concepto); a.q.ivaSop += iva; a.y.gastos += base;
+}
+function addOblig(o) {
+  o.id = (S.flags.oblSeq = (S.flags.oblSeq || 0) + 1); o.created = S.day; o.done = false;
+  S.obligations.push(o);
+  notify(`📱 <b>${o.org}</b>: nuevo plazo · ${o.name} hasta el <b>${fshort(o.due)}</b>${o.amount ? ` (${eur(o.amount)})` : ''}`);
+}
+function choicesFor(correct, wrongs) {
+  const arr = [[String(correct.v), correct.l]];
+  for (const w of wrongs) if (!arr.some(x => x[0] === String(w.v))) arr.push([String(w.v), w.l]);
+  return arr.sort(() => Math.random() - .5);
+}
+const r2 = n => Math.round(n * 100) / 100;
+
+/* ---------- cierres de mes, trimestre y año ---------- */
+function monthClose() {
+  const a = A(), d = dateOf(S.day), prev = dateOf(S.day - 1);
+  const mesTxt = MESES[prev.getMonth()];
+  // nóminas y cotizaciones del mes que acaba
+  let bruto = 0, brutoAlta = 0;
+  for (const e of S.employees) { bruto += e.mesBruto || 0; if (e.alta) brutoAlta += e.mesBrutoAlta || 0; e.mesBruto = 0; e.mesBrutoAlta = 0; }
+  bruto = r2(bruto); brutoAlta = r2(brutoAlta);
+  if (bruto > 0) {
+    const irpf = r2(brutoAlta * TIPO.irpfNomina), ssT = r2(brutoAlta * TIPO.ssTrab), ssE = r2(brutoAlta * TIPO.ssEmpresa);
+    a.q.irpf += irpf; a.y.gastos += bruto + ssE; if (irpf) a.y.had111 = true;
+    addOblig({ model: 'NOM', kind: 'nomina', org: 'Tu plantilla', name: `Nóminas de ${mesTxt}`, amount: r2(bruto - irpf - ssT), due: S.day + 4, period: mesTxt });
+    if (brutoAlta > 0) addOblig({ model: 'RLC', kind: 'tgss', org: 'Seguridad Social', name: `Cotizaciones de ${mesTxt} (RLC/RNT)`, amount: r2(ssE + ssT), due: S.day + new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - 1,
+      period: String(prev.getMonth() + 1).padStart(2, '0'), choices: choicesFor({ v: r2(ssE + ssT), l: `${eur(r2(ssE + ssT))} (cuota empresarial ${eur(ssE)} + cuota obrera ${eur(ssT)})` }, [{ v: ssE, l: `${eur(ssE)} (solo cuota empresarial)` }, { v: r2(brutoAlta), l: `${eur(brutoAlta)} (el bruto entero, por si acaso)` }]) });
+  }
+  // gastos fijos del mes que empieza
+  gasto(ALQUILER, TIPO.ivaGen, `Alquiler del local (${MESES[d.getMonth()]}) · retención 19 % a ingresar en el 115`, r2(ALQUILER * TIPO.retAlquiler));
+  a.q.ret115 += r2(ALQUILER * TIPO.retAlquiler); a.y.had115 = true;
+  gasto(SUMINISTROS, TIPO.ivaGen, 'Luz, agua y gas (Iberdrola-ish, Aguas de Cala Tramita)');
+  money(-retaCuota(), `Recibo RETA autónomos (${S.reta.tarifaPlana ? 'tarifa plana' : 'tramo 5'})`); a.y.gastos += retaCuota();
+  if (S.asesor) gasto(ASESOR_CUOTA, TIPO.ivaGen, 'Cuota mensual Asesoría Hnos. Sellés');
+  if (d.getMonth() % 3 === 0) quarterClose();
+  if (d.getMonth() === 0) yearClose();
+}
+function quarterClose() {
+  const a = A(), prev = dateOf(S.day - 1), qn = Math.floor(prev.getMonth() / 3) + 1, per = `${qn}T`;
+  const y = dateOf(S.day).getFullYear(), m = dateOf(S.day).getMonth();
+  const due = dayOf(y, m, qn === 4 ? 30 : 20);
+  const rep = r2(a.q.ivaRep), sop = r2(a.q.ivaSop + a.compensar), res = r2(rep - sop);
+  addOblig({ model: '303', kind: 'aeat', org: 'Hacienda', name: `IVA ${per} (modelo 303)`, amount: Math.max(0, res), due, period: per, info: `IVA repercutido: ${eur(rep)} · IVA soportado deducible: ${eur(sop)}${a.compensar ? ` (incluye ${eur(a.compensar)} a compensar de trimestres anteriores)` : ''}`,
+    choices: choicesFor({ v: Math.max(0, res), l: res >= 0 ? `A ingresar ${eur(res)} (repercutido − soportado)` : `A compensar ${eur(-res)}: resultado 0 € a ingresar` }, [{ v: r2(rep + sop), l: `A ingresar ${eur(r2(rep + sop))} (repercutido + soportado)` }, { v: rep, l: `A ingresar ${eur(rep)} (todo el repercutido, sin deducir nada)` }]),
+    compensa: res < 0 ? -res : 0 });
+  const rn = r2(a.y.ingresos - a.y.gastos), p130 = r2(Math.max(0, rn * .2 - a.y.pagos130));
+  addOblig({ model: '130', kind: 'aeat', org: 'Hacienda', name: `Pago fraccionado IRPF ${per} (modelo 130)`, amount: p130, due, period: per,
+    info: `Ingresos acumulados del año: ${eur(a.y.ingresos)} · gastos deducibles: ${eur(a.y.gastos)} · pagos previos: ${eur(a.y.pagos130)}`,
+    choices: choicesFor({ v: p130, l: `${eur(p130)} (20 % del rendimiento neto acumulado − pagos anteriores)` }, [{ v: r2(Math.max(0, a.y.ingresos * .2)), l: `${eur(r2(a.y.ingresos * .2))} (20 % de los ingresos, sin restar gastos)` }, { v: r2(Math.max(0, rn * .2)), l: `${eur(r2(Math.max(0, rn * .2)))} (sin restar los pagos anteriores)` }]) });
+  if (a.q.irpf > 0) addOblig({ model: '111', kind: 'aeat', org: 'Hacienda', name: `Retenciones de nóminas ${per} (modelo 111)`, amount: r2(a.q.irpf), due, period: per,
+    choices: choicesFor({ v: r2(a.q.irpf), l: `${eur(a.q.irpf)} (IRPF retenido en las nóminas)` }, [{ v: 0, l: '0 € (las retenciones se las queda uno, ¿no?)' }]) });
+  if (a.q.ret115 > 0) addOblig({ model: '115', kind: 'aeat', org: 'Hacienda', name: `Retenciones del alquiler ${per} (modelo 115)`, amount: r2(a.q.ret115), due, period: per,
+    choices: choicesFor({ v: r2(a.q.ret115), l: `${eur(a.q.ret115)} (19 % de las rentas del alquiler)` }, [{ v: r2(a.q.ret115 / .19 * .21), l: 'El 21 % (eso es el IVA, no la retención)' }]) });
+  a.q = { ivaRep: 0, ivaSop: 0, irpf: 0, ret115: 0 };
+}
+function yearClose() {
+  const a = A(), y = dateOf(S.day).getFullYear();
+  addOblig({ model: '390', kind: 'aeat', org: 'Hacienda', name: `Resumen anual de IVA ${y - 1} (modelo 390)`, amount: 0, due: dayOf(y, 0, 30), period: '0A' });
+  if (a.y.had111) addOblig({ model: '190', kind: 'aeat', org: 'Hacienda', name: `Resumen anual de retenciones ${y - 1} (modelo 190)`, amount: 0, due: dayOf(y, 0, 31), period: '0A' });
+  if (a.y.had115) addOblig({ model: '180', kind: 'aeat', org: 'Hacienda', name: `Resumen anual del alquiler ${y - 1} (modelo 180)`, amount: 0, due: dayOf(y, 0, 31), period: '0A' });
+  a.y = { ingresos: 0, gastos: 0, pagos130: 0, had111: false, had115: false };
+}
+
+/* ---------- recargos y presentación ---------- */
+function recargo(o) {
+  const late = S.day - o.due; if (late <= 0) return 0;
+  if (o.kind === 'aeat') return r2(o.amount * (.01 + .01 * Math.floor(late / 30)));
+  if (o.kind === 'tgss') return r2(o.amount * (late <= 30 ? .10 : .20));
+  if (o.kind === 'nomina') return r2(o.amount * .10 * late / 365);
+  return 0;
+}
+function finishOblig(o, by) {
+  const rec = recargo(o);
+  if (o.amount > 0) money(-o.amount, `${o.name}${by ? ' (vía asesoría)' : ''}`);
+  if (rec > 0) money(-rec, `Recargo por presentación fuera de plazo · ${o.name}`);
+  if (o.model === '130') A().y.pagos130 += o.amount;
+  if (o.model === '303') A().compensar = o.compensa || 0;
+  if (o.kind === 'nomina') for (const e of S.employees) e.moral = clamp(e.moral + (rec ? -5 : 4), 0, 100);
+  o.done = true; o.doneDay = S.day;
+  return rec;
+}
+async function presentOblig(o) {
+  if (o.kind === 'nomina') {
+    const v = await modal(`<h2>💶 ${o.name}</h2><p>Transferencia a la plantilla: <b>${eur(o.amount)}</b> netos (ya descontadas retenciones de IRPF y cuota obrera).</p>
+      ${S.day > o.due ? `<p class="negt">Vas con ${S.day - o.due} día(s) de retraso. Interés de demora: ${eur(recargo(o))}.</p>` : ''}`,
+      [{ label: 'Ahora no', value: false }, { label: 'Pagar nóminas', cls: 'pri', value: true }]);
+    if (!v) return;
+    const rec = finishOblig(o); addXp(10); SFX.cash();
+    toast(`Nóminas pagadas${rec ? ' (con retraso)' : ''}. ${pick(['La plantilla te mira con respeto.', '«¡Ha cobrado el jefe! Digo... ¡hemos cobrado!»'])}`, 'good'); return;
+  }
+  const p = await sedeElectronica(o.kind === 'tgss' ? 'TGSS · Sistema RED' : 'Agencia Tributaria · Sede electrónica', !Day.running); if (!p) return;
+  const per = ['1T', '2T', '3T', '4T', '0A', o.period].filter((x, i, arr) => arr.indexOf(x) === i);
+  const fields = [
+    { id: 'modelo', label: 'Modelo a presentar', type: 'select', options: [['', '— Seleccione —'], ...[...new Set([o.model, ...MODEL_DISTRACT])].map(m => [m, m === 'RLC' ? 'RLC/RNT (cotizaciones)' : m === 'SAN' ? 'Modelo 069 (carta de pago de sanción)' : 'Modelo ' + m])],
+      ok: o.model, err: v => `Ha presentado el modelo ${v || '(ninguno)'} en vez del que tocaba. La sede lo acepta encantada... y luego se lo rechaza.` },
+    { id: 'per', label: 'Periodo', type: 'select', options: per.map(x => [x, x === '0A' ? '0A (anual)' : /T$/.test(x) ? `${x} (trimestre ${x[0]})` : `Mes ${x}`]), ok: o.period, err: 'Periodo equivocado. Ese ya lo presentó (o no existe).' },
+  ];
+  if (o.choices) fields.push({ id: 'imp', label: 'Resultado de la liquidación', type: 'radio', options: o.choices, ok: String(o.amount), err: 'El importe no cuadra. La AEAT tiene una calculadora y no tiene miedo de usarla.' });
+  fields.push({ id: 'ok', label: 'Declaración', type: 'check', text: 'Declaro bajo mi responsabilidad que los datos son ciertos (y que he entendido algo)', ok: true, err: 'Debe declarar que los datos son ciertos.' });
+  const r = await fillForm({ org: o.kind === 'tgss' ? 'Tesorería General de la Seguridad Social' : 'Agencia Tributaria', title: o.name, intro: (o.info || '') + (S.day > o.due ? `<br><b class="negt">Fuera de plazo (${S.day - o.due} días): recargo ${eur(recargo(o))}</b>` : ''), fields, submit: 'Firmar y presentar' });
+  if (!r) return;
+  if (r.errs.length) { addXp(2); await stampResult(false, o.name, ['Errores:', ...r.errs.map(e => '• ' + e)], '', 'RECHAZADA'); return; }
+  const rec = finishOblig(o); addXp(rec ? 8 : 20);
+  await stampResult(true, o.name, [o.amount ? `Cargo en cuenta: ${eur(o.amount)}` : 'Declaración informativa / sin importe a ingresar.', rec ? `Recargo extemporáneo: ${eur(rec)}` : 'Presentada en plazo. ¡Así me gusta!', `CSV: ${Math.random().toString(36).slice(2, 10).toUpperCase()}${Math.random().toString(36).slice(2, 8).toUpperCase()}`], 'PRESENTADA');
+}
+const pending = () => S.obligations.filter(o => !o.done).sort((a, b) => a.due - b.due);
+window.pendingObligations = () => pending().length;
+window.plazosInfo = () => ({ n: pending().length, late: pending().filter(o => S.day > o.due).length });
+window.renderObligations = () => {
+  const ps = pending();
+  const pend = ps.map(o => `<div class="item"><h4><span>${o.name}</span>${S.day > o.due ? '<span class="tag no">VENCIDO</span>' : o.due - S.day <= 3 ? '<span class="tag pend">¡YA!</span>' : ''}</h4>
+    <div class="muted">${o.org} · plazo hasta el ${fshort(o.due)} (${o.due - S.day >= 0 ? `quedan ${o.due - S.day} días` : `${S.day - o.due} días tarde`})${o.amount ? ` · ${eur(o.amount)}` : ''}</div>
+    <div class="btns" style="justify-content:flex-start;margin-top:5px"><button class="btn pri" data-o="${o.id}">${o.kind === 'nomina' ? 'Pagar' : 'Presentar'}</button></div></div>`).join('');
+  const done = S.obligations.filter(o => o.done).slice(-5).reverse().map(o => `<div class="muted">✅ ${o.name} · ${fshort(o.doneDay)}</div>`).join('');
+  return `<h4>Obligaciones pendientes</h4>${pend || '<p class="muted">Nada pendiente. Disfruta el momento: no durará.</p>'}${done ? `<h4>Últimas presentadas</h4>${done}` : ''}`;
+};
+window.bindObligations = c => c.querySelectorAll('[data-o]').forEach(b => b.onclick = async () => {
+  const o = S.obligations.find(x => x.id === +b.dataset.o); await presentOblig(o);
+  if (!$('#phone').classList.contains('hidden')) openApp('tramites');
+});
+
+/* ---------- el paso de cada día ---------- */
+const FIESTAS = [{ m: 5, d: [23, 24], name: 'Nit de Sant Joan (hogueras en la playa)', rush: 1.9 }, { m: 7, d: [14, 15, 16, 17], name: 'Fiestas patronales de Sant Tràmit', rush: 2.3 }, { m: 9, d: [9, 10, 11, 12], name: 'Moros y Cristianos de Cala Tramita', rush: 2.0 }];
+function fiestaOf(day) { const d = dateOf(day); return FIESTAS.find(f => f.m === d.getMonth() && f.d.includes(d.getDate())); }
+Hooks.newDay.push(async () => {
+  const a = A(), yesterday = S.day - 1;
+  // devengo diario de sueldos
+  for (const e of S.employees) if (e.startDay <= yesterday && S.open) { e.mesBruto = (e.mesBruto || 0) + empBruto(e) / 30; if (e.alta) e.mesBrutoAlta = (e.mesBrutoAlta || 0) + empBruto(e) / 30; }
+  if (dateOf(S.day).getDate() === 1 && S.open) monthClose();
+  // descubierto
+  if (S.money < 0) money(-35, 'Comisión por descubierto (Banco Mediterráneo de Comisiones)');
+  // asesor
+  if (S.asesor) for (const o of pending()) if (S.day >= o.created + 1 && !(o.kind !== 'nomina' && S.flags.sedeCaida === S.day)) {
+    finishOblig(o, true);
+    notify(`💼 Asesoría Hnos. Sellés: «${o.name}: ${o.amount ? 'presentado y pagado' : 'presentado'}. ${pick(ASESOR_CHISTES)}»`);
+  }
+  // plazos vencidos
+  for (const o of pending()) {
+    const late = S.day - o.due;
+    if (late === 1) notify(`⏰ Se te ha pasado el plazo: <b>${o.name}</b>. Empiezan los recargos.`, 'bad');
+    if (o.kind === 'aeat' && late > 25) {
+      const san = r2(Math.max(200, o.amount * .5));
+      money(-o.amount, `${o.name} · liquidación de oficio`); money(-san, `Sanción tributaria · ${o.name}`); o.done = true; o.doneDay = S.day;
+      S.pendingEvents.push({ type: 'txt', html: `<h2>📨 Notificación de Hacienda</h2><p>No presentó el <b>${o.name}</b>. Hacienda lo ha liquidado de oficio y le impone una sanción de <b>${eur(san)}</b>.</p><p class="muted">Le recordamos que puede recurrir. En un mes. Por la sede. Con certificado.</p>` });
+    }
+    if (o.kind === 'tgss' && late > 30) {
+      finishOblig(o); S.pendingEvents.push({ type: 'txt', html: `<h2>🏦 Providencia de apremio</h2><p>La TGSS ha cobrado de su cuenta las <b>${o.name}</b> con un recargo del 20 %. Sin avisar, que es lo suyo.</p>` });
+    }
+    if (o.kind === 'nomina' && late > 0 && late % 3 === 0) { for (const e of S.employees) e.moral = clamp(e.moral - 12, 0, 100); notify('😠 La plantilla no ha cobrado. La moral cae en picado.', 'bad'); if (late >= 9) S.flags.forceInsp = true; }
+  }
+  // final de partida
+  if (S.money < -10000) S.over = { type: 'quiebra', text: `Saldo: ${eur(S.money)}. El banco te ha cerrado la cuenta y el proveedor de pan ya no te fía. Concurso de acreedores. Al menos el papeleo del concurso es... más papeleo.` };
+  if (S.sanitariasMal >= 2) S.over = { type: 'sancion', text: 'Segunda inspección sanitaria desfavorable: Sanidad precinta la cocina. La plancha, triste, se enfría.' };
+  // eventos aleatorios
+  if (S.open && !S.over) rollEvents();
+});
+Hooks.dayStart.push(() => {
+  const f = fiestaOf(S.day); if (f) { Day.rush = f.rush; toast(`🎉 ¡${f.name}! Avalancha de clientes.`, 'warn', 4000); }
+  if (S.flags.vipDay === S.day) Day.vipAt = rnd(40, 140);
+  if (S.flags.rushDay === S.day) Day.rush = Math.max(Day.rush, 1.8);
+});
+/* registro de jornada diario */
+Hooks.dayEnd.unshift(() => {
+  const ws = S.employees.filter(e => e.today);
+  S.flags.workedToday = ws.map(e => e.id);
+  const a = A();
+  const base = Day.sales / (1 + TIPO.iva); a.q.ivaRep += Day.sales - base; a.y.ingresos += base;
+  const cb = Day.costs / (1 + TIPO.iva); a.q.ivaSop += Day.costs - cb; a.y.gastos += cb;
+  S.flags.rawWeek = (S.flags.rawWeek || 0) * .8 + Day.rawServed;
+  if (!ws.length) return null;
+  return { html: `<div class="item"><h4>🕐 Registro de jornada (obligatorio, art. 34.9 ET)</h4>
+    ${ws.map(e => `<label class="opt"><input type="checkbox" data-reg="${e.id}"> ${esc(e.name)} · entrada 13:00 · salida 23:00 · firma: ________</label>`).join('')}
+    <div class="muted">${S.asesor ? '💼 El asesor: «El registro es cosa tuya, que yo no estoy en el local.»' : 'Sin registro firmado, la Inspección de Trabajo se pone muy creativa.'}</div></div>` };
+});
+Hooks.summary.push(() => {
+  for (const id of S.flags.workedToday || []) {
+    const e = S.employees.find(x => x.id === id); const cb = document.querySelector(`#modalCard [data-reg="${id}"]`);
+    if (e && cb && !cb.checked) e.regFalta = (e.regFalta || 0) + 1;
+    if (e && cb && cb.checked) addXp(2);
+  }
+  return true;
+});
+Hooks.inspeccion = [plantilla => {
+  const falta = plantilla.filter(e => e.regFalta > 0); if (!falta.length) return null;
+  let total = 0; const lines = falta.map(e => { const m = 1000 + 60 * e.regFalta; total += m; const l = `${esc(e.name)}: ${e.regFalta} día(s) sin registro de jornada → <b>${eur(m)}</b>`; e.regFalta = 0; return l; });
+  return { lines, total, grave: false };
+}];
+Hooks.prep.push(() => {
+  if (!S.open) return null;
+  const ps = pending().filter(o => o.due - S.day <= 7);
+  const f = fiestaOf(S.day);
+  let h = '';
+  if (f) h += `<div class="item"><h4>🎉 Hoy: ${f.name}</h4><div class="muted">Se espera avalancha de clientes. Y de ruido.</div></div>`;
+  if (S.flags.vipDay === S.day) h += `<div class="item"><h4>📸 Rumor</h4><div class="muted">Dicen que hoy viene el influencer @ElGastroCuñao.</div></div>`;
+  if (ps.length) h += `<div class="item"><h4>📌 Plazos próximos</h4>${ps.map(o => `<div>${S.day > o.due ? '🔴' : '🟡'} ${o.name} · ${fshort(o.due)}${o.amount ? ` · ${eur(o.amount)}` : ''}</div>`).join('')}<div class="muted">Se presentan desde 📱 Móvil → Trámites.</div></div>`;
+  const sinAlta = S.employees.filter(e => e.startDay <= S.day + 1 && (!e.alta || !e.contrato));
+  if (sinAlta.length) h += `<div class="item"><h4>⚠️ Personal sin papeles</h4>${sinAlta.map(e => `<div>${esc(e.name)}: ${!S.ccc ? 'falta CCC, ' : ''}${!e.alta ? 'falta alta, ' : ''}${!e.contrato ? 'falta contrato' : ''}</div>`).join('')}</div>`;
+  return h ? { html: h } : null;
+});
+
+/* ---------- eventos aleatorios ---------- */
+const ASESOR_CHISTES = ['Esto con el papel no pasaba... bueno, sí pasaba.', 'El 111 es como el gimnasio: si no vas, te lo cobran igual.', '¿Factura? Mándamela en foto, aunque sea de un ticket arrugado.',
+  'Hacienda somos todos. Unos más que otros.', 'He visto un BOE nuevo y me he emocionado.', '¿Los tickets de la gasolina? Ah, que no tienes coche. Pues nada.', 'Si te preguntan, la culpa es del sistema.', 'Firma aquí, aquí y aquí. No leas, que es peor.'];
+const EVENTOS = {
+  sanitaria: { w: () => .05 + Math.min(.25, (S.flags.rawWeek || 0) * .04) },
+  reclamacion: { w: () => S.rep < 3 ? .1 : .05 },
+  requerimiento: { w: () => S.day > 20 ? .05 : 0 },
+  vacaciones: { w: () => S.employees.some(e => e.startDay < S.day && !(e.vacUntil >= S.day)) ? ([6, 7].includes(dateOf(S.day).getMonth()) ? .12 : .04) : 0 },
+  sede: { w: () => .05 },
+  influencer: { w: () => S.day > 5 ? .07 : 0 },
+  mercadillo: { w: () => .04 },
+  policia: { w: () => S.upgrades.terraza && !S.upgrades.terrazaLic ? .3 : 0 },
+};
+function rollEvents() {
+  if (Math.random() > .45) return;
+  const list = Object.entries(EVENTOS).map(([k, v]) => [k, v.w()]).filter(x => x[1] > 0);
+  const tot = list.reduce((a, x) => a + x[1], 0); let r = Math.random() * tot;
+  for (const [k, w] of list) { if ((r -= w) <= 0) { S.pendingEvents.push({ type: k }); break; } }
+}
+Hooks.prep.push(async () => {
+  while (S.pendingEvents.length) {
+    const ev = S.pendingEvents.shift();
+    await runEvent(ev);
+    save();
+    if (S.over) { gameOver(); return { block: true }; }
+  }
+  return null;
+});
+async function runEvent(ev) {
+  switch (ev.type) {
+    case 'txt': await modal(ev.html); break;
+    case 'sede':
+      S.flags.sedeCaida = S.day;
+      await modal(`<h2>🖥️ Caída de la sede electrónica</h2><p>«Debido a una incidencia técnica, la sede electrónica no está disponible.» Hoy no podrás presentar nada online.</p><p class="muted">Los plazos, por supuesto, no se amplían. Faltaría más.</p>`); break;
+    case 'influencer': S.flags.vipDay = S.day; await modal('<h2>📸 Rumor en el pueblo</h2><p>Dicen que hoy pasará por aquí <b>@ElGastroCuñao</b>, influencer gastronómico con 300.000 seguidores. Si le sirves perfecto y rápido, la fama está asegurada. Si no...</p>'); break;
+    case 'mercadillo': S.flags.rushDay = S.day; await modal('<h2>🛍️ Día de mercadillo</h2><p>Hoy hay mercadillo en el paseo: más gente con hambre y bolsas de calcetines.</p>'); break;
+    case 'sanitaria': {
+      const q = pick([
+        { p: 'A ver ese termómetro de la cámara... ¿a qué temperatura la tiene?', o: [['3', '3 °C, como dice el plan APPCC'], ['12', 'A 12 °C, que si no se congela la lechuga'], ['?', '¿Qué termómetro?']], ok: '3' },
+        { p: '¿Dónde guarda la carne cruda?', o: [['abajo', 'En la balda inferior, separada de lo listo para comer'], ['arriba', 'Arriba del todo, encima de la tarta'], ['fuera', 'Fuera, que con la brisa se conserva']], ok: 'abajo' },
+        { p: '¿Me enseña los certificados de formación del personal?', o: [['si', 'Aquí están, todos al día'], ['no', 'Están... en casa de mi madre']], ok: 'si' },
+      ]);
+      let ans = null;
+      await modal(`<h2>🧪 Inspección sanitaria</h2><p>Un inspector con bata blanca y linterna: <i>«${q.p}»</i></p><div class="fld">${q.o.map(o => `<label class="opt"><input type="radio" name="ins" value="${o[0]}">${o[1]}</label>`).join('')}</div>`,
+        [{ label: 'Responder', cls: 'pri', value: true, check: () => { const r = document.querySelector('input[name="ins"]:checked'); ans = r && r.value; return !!r; } }]);
+      const crudas = Math.round(S.flags.rawWeek || 0);
+      let multa = 0; const lines = [];
+      if (ans !== q.ok) { multa += 600; lines.push('Respuesta inadecuada sobre autocontrol → 600 € (leve)'); }
+      if (crudas >= 3) { multa += 3000; lines.push(`Clientes denuncian carne poco hecha (${crudas} casos recientes) → 3.000 € (grave)`); S.sanitariasMal++; S.flags.rawWeek = 0; }
+      if (multa) { money(-multa, 'Sanción · Inspección sanitaria'); addRep(-.3); SFX.stamp(); }
+      else addXp(25);
+      await modal(`<div class="paper"><div class="org"><span>Salud Pública</span><span>${fshort(S.day)}</span></div><h3>Acta de inspección sanitaria</h3>
+        ${lines.length ? lines.map(l => `<p>• ${l}</p>`).join('') + `<p class="muted">Inspecciones desfavorables graves: ${S.sanitariasMal}/2.</p>` : '<p>Instalaciones conformes. El inspector pide una hamburguesa «para comprobar la temperatura». Se la come entera.</p>'}
+        <div class="stamp ${multa ? 'no' : 'ok'}">${multa ? 'DESFAVORABLE' : 'FAVORABLE'}</div></div>`);
+      break;
+    }
+    case 'reclamacion': {
+      const v = await modal(`<h2>📋 «¡Quiero la hoja de reclamaciones!»</h2><p>Un cliente de ayer vuelve indignado: <i>«¡Ayer la hamburguesa tenía el pan del revés!»</i></p>`,
+        [{ label: 'Decir que no tenemos', cls: 'mal', value: 'no' }, { label: 'Invitarle a un café', cls: 'azul', value: 'cafe' }, { label: 'Dársela con una sonrisa', cls: 'ok', value: 'dar' }]);
+      if (v === 'no') {
+        if (Math.random() < .6) { money(-1500, 'Sanción de Consumo: negativa a facilitar hojas de reclamaciones'); addRep(-.3); await modal('<h2>📮 Consumo</h2><p>El cliente ha ido a Consumo. Negarse a dar la hoja es infracción: <b>1.500 €</b>. Y la tenías justo encima de la barra.</p>'); }
+        else await modal('<p>El cliente se va murmurando. Te has librado... esta vez.</p>');
+      } else if (v === 'cafe') {
+        money(-1.5, 'Café de la paz');
+        if (Math.random() < .5) { addRep(.05); await modal('<p>«Bueno... el café está bueno. Lo dejamos estar.» Reclamación evitada.</p>'); }
+        else { addRep(-.08); addXp(10); await modal('<p>«El café, bien. Pero quiero la hoja.» Se la das. Rellena tres páginas y dibuja una hamburguesa del revés.</p>'); }
+      } else { addRep(-.08); addXp(10); await modal('<p>Le das la hoja (original para él, copia para ti y otra para Consumo). Se siente escuchado. Tú, auditado.</p>'); }
+      break;
+    }
+    case 'requerimiento': {
+      if (S.asesor) { addXp(5); await modal(`<h2>📨 Requerimiento de Hacienda</h2><p>Hacienda pide justificar las facturas de proveedores. Tu asesor lo contesta: <i>«${pick(ASESOR_CHISTES)}»</i>. Resuelto.</p>`); break; }
+      const v = await modal(`<h2>📨 Requerimiento de Hacienda</h2><p>«Se le requiere para que aporte, en el plazo de 10 días hábiles, las facturas de proveedores del último trimestre.»</p>`,
+        [{ label: 'Ignorarlo', cls: 'mal', value: 'ign' }, { label: 'Contestar por la sede', cls: 'pri', value: 'sede' }]);
+      if (v === 'sede' && await sedeElectronica('Agencia Tributaria · Registro electrónico', false)) { addXp(25); SFX.stamp(); await modal('<h2>✅ Requerimiento contestado</h2><p>Escaneas 47 facturas, las juntas en un PDF de 80 MB, la sede solo admite 10 MB, las divides en 8 partes... y lo consigues.</p>'); }
+      else if (!S.over && S.day) { S.obligations.push({ id: (S.flags.oblSeq = (S.flags.oblSeq || 0) + 1), model: 'SAN', kind: 'aeat', org: 'Hacienda', name: 'Sanción por no atender requerimiento', amount: 400, due: S.day + 10, period: '0A', created: S.day, done: false, info: 'Sanción por resistencia, obstrucción, excusa o negativa (art. 203 LGT). Se paga con la carta de pago (modelo 069, de los que nadie ha oído hablar).', choices: [['400', '400 € (lo que pone la sanción)'], ['0', '0 € (yo no he sido)']] }); toast('📨 Hacienda toma nota. Y tú tienes un nuevo plazo.', 'bad', 4000); }
+      break;
+    }
+    case 'vacaciones': {
+      const e = pick(S.employees.filter(e => e.startDay < S.day && !(e.vacUntil >= S.day)));
+      const v = await modal(`<h2>🏖️ ${esc(e.name)} pide vacaciones</h2><p>«Jefe, ¿me puedo coger agosto? Es que mi cuñado tiene un apartamento en Benidorm y si no lo cogemos ahora se lo queda la otra cuñada.»</p>
+        <p class="muted">Las vacaciones se pactan (30 días naturales al año). En temporada alta, duele.</p>`,
+        [{ label: 'No, es temporada alta', cls: 'mal', value: 'no' }, { label: 'Una semana ahora y otra en noviembre', cls: 'azul', value: 'medio' }, { label: 'Vale, dos semanas', cls: 'ok', value: 'si' }]);
+      if (v === 'no') { e.moral = clamp(e.moral - 25, 0, 100); await modal(`<p>${esc(e.name)}: «Vale... (enfado nivel: abuela sin nietos en Navidad)».</p>`); }
+      else if (v === 'medio') { e.moral = clamp(e.moral + 8, 0, 100); e.vacUntil = S.day + 6; await modal(`<p>${esc(e.name)}: «Bueno, algo es algo». Vuelve el ${fshort(S.day + 7)}.</p>`); }
+      else { e.moral = clamp(e.moral + 20, 0, 100); e.vacUntil = S.day + 13; await modal(`<p>${esc(e.name)}: «¡Eres el mejor jefe del mundo!». Vuelve el ${fshort(S.day + 14)}. Las vacaciones se pagan igual, claro.</p>`); }
+      break;
+    }
+    case 'policia': {
+      money(-1200, 'Multa Policía Local: terraza sin licencia de ocupación de vía pública'); addRep(-.15); SFX.stamp();
+      await modal('<h2>🚓 Policía Local</h2><p>«Buenos días. ¿Licencia de terraza?» No la tienes. Multa de <b>1.200 €</b> y te hacen recoger las sillas delante de toda la clientela.</p><p class="muted">Tramita la licencia desde 📱 Móvil → Mejoras.</p>');
+      break;
+    }
+  }
+}
+
+/* ---------- app Calendario ---------- */
+let calOffset = 0;
+registerApp({ id: 'calendario', icon: '📅', name: 'Calendario', color: '#ff9d8f', badge: () => pending().filter(o => o.due - S.day <= 3).length, render(c) {
+  const base = dateOf(S.day), y = base.getFullYear(), m = base.getMonth() + calOffset;
+  const first = new Date(y, m, 1), daysIn = new Date(y, m + 1, 0).getDate(), lead = (first.getDay() + 6) % 7;
+  const label = `${MESES[first.getMonth()]} ${first.getFullYear()}`;
+  let cells = ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map(d => `<div class="h">${d}</div>`).join('') + '<div class="h"></div>'.repeat(lead);
+  for (let d = 1; d <= daysIn; d++) {
+    const gd = dayOf(first.getFullYear(), first.getMonth(), d);
+    const obs = S.obligations.filter(o => o.due === gd);
+    const fi = fiestaOf(gd);
+    cells += `<div class="${gd === S.day ? 'hoy' : gd < S.day ? 'pas' : ''}">${d}${obs.map(o => `<span class="dot">${o.done ? '✅' : '📌'}${o.model}</span>`).join('')}${fi ? '<span class="dot">🎉</span>' : ''}</div>`;
+  }
+  const fixed = [['Día 20 de ene/abr/jul/oct', '303 · 130 · 111 · 115 (trimestrales)'], ['30-31 de enero', '390 · 190 · 180 (resúmenes anuales) y 4T'], ['Último día del mes', 'Cotizaciones a la Seguridad Social del mes anterior'], ['Primeros días de mes', 'Nóminas, alquiler, suministros y cuota de autónomos'], ['Cada día', 'Registro de jornada de cada empleado']];
+  c.innerHTML = `<div class="btns" style="justify-content:space-between;margin:0 0 6px"><button class="btn" id="cPrev">◀</button><b style="align-self:center;text-transform:capitalize">${label}</b><button class="btn" id="cNext">▶</button></div>
+    <div class="cal">${cells}</div>
+    <h4>Calendario del contribuyente</h4>${fixed.map(f => `<div class="item"><b>${f[0]}</b><div class="muted">${f[1]}</div></div>`).join('')}
+    <h4>Fiestas del pueblo</h4>${FIESTAS.map(f => `<div class="muted">🎉 ${f.d[0]}–${f.d[f.d.length - 1]} de ${MESES[f.m]}: ${f.name}</div>`).join('')}`;
+  c.querySelector('#cPrev').onclick = () => { calOffset--; openApp('calendario'); };
+  c.querySelector('#cNext').onclick = () => { calOffset++; openApp('calendario'); };
+} });
+
+/* ---------- app Asesor ---------- */
+registerApp({ id: 'asesor', icon: '💼', name: 'Asesor', color: '#c9b3ff', render(c) {
+  c.innerHTML = `<div class="item"><h4>Asesoría Hnos. Sellés <span>${S.asesor ? '<span class="tag ok">CONTRATADA</span>' : ''}</span></h4>
+    <p>«Nosotros te presentamos 303, 130, 111, 115, cotizaciones, resúmenes anuales y te pagamos las nóminas. Tú solo cocina y firma donde ponga "firma".»</p>
+    <p class="muted">Cuota: ${eur(ASESOR_CUOTA)} + IVA al mes. No incluye: registro de jornada (eso es tuyo), trámites de personal ni milagros.</p>
+    <div class="btns" style="justify-content:flex-start">${S.asesor ? '<button class="btn mal" id="aOff">Prescindir del asesor</button>' : '<button class="btn pri" id="aOn">Contratar asesoría</button>'}</div></div>
+    <div class="item"><h4>💬 Último consejo</h4><p><i>«${pick(ASESOR_CHISTES)}»</i></p></div>`;
+  const on = c.querySelector('#aOn'), off = c.querySelector('#aOff');
+  if (on) on.onclick = () => { S.asesor = true; gasto(ASESOR_CUOTA, TIPO.ivaGen, 'Alta Asesoría Hnos. Sellés (primer mes)'); toast('💼 «Encantados. Mándanos todo por WhatsApp, aunque sea en foto.»', 'good', 4000); openApp('asesor'); };
+  if (off) off.onclick = () => { S.asesor = false; toast('💼 «Tú verás. Ya volverás, todos vuelven.»', 'info'); openApp('asesor'); };
+} });
+
+/* ---------- mejoras y progresión ---------- */
+const MEJORAS = [
+  { id: 'plancha', name: 'Segunda plancha', icon: '🔥', price: 1400, desc: 'Dos huecos más para la carne.', has: () => S.upgrades.planchas > 1, buy: () => { S.upgrades.planchas = 2; } },
+  { id: 'freidora', name: 'Freidora', icon: '🍟', price: 950, desc: 'Patatas fritas en la carta (+2,50 € por pedido).', has: () => S.upgrades.freidora, buy: () => { S.upgrades.freidora = true; } },
+  { id: 'carta', name: 'Carta ampliada', icon: '🥓', price: 700, desc: 'Bacon, tomate, doble de carne y refrescos.', has: () => S.upgrades.carta, buy: () => { S.upgrades.carta = true; } },
+  { id: 'terraza', name: 'Terraza (mobiliario)', icon: '☀️', price: 2800, desc: '4 mesas en el paseo marítimo: más clientes. ¡Requiere licencia de terraza!', has: () => S.upgrades.terraza, buy: () => { S.upgrades.terraza = true; } },
+];
+const F_TERRAZA = [
+  { id: 'mesas', label: 'Número de mesas solicitadas', type: 'num', help: 'Frente de fachada: 16 m. Plano adjunto: hueco para 4 mesas.', ok: v => v >= 1 && v <= 4, err: v => v > 4 ? `¿${v} mesas? Según el plano solo caben 4. Las demás, ¿en la arena?` : 'Al menos una mesa, hombre.' },
+  { id: 'paso', label: 'Espacio libre de paso para peatones', type: 'select', options: [['', '— Seleccione —'], ['180', 'Al menos 1,80 m'], ['50', '0,50 m, que pasen de lado'], ['0', 'Ninguno, que rodeen por la arena']], ok: '180', err: 'La ordenanza exige un itinerario peatonal accesible de 1,80 m.' },
+  { id: 'horario', label: 'Horario de cierre de la terraza', type: 'select', options: [['', '— Seleccione —'], ['00', '00:00 h (temporada de verano)'], ['ult', 'Cuando se vaya el último'], ['am', '04:00, que hay fiesta']], ok: '00', err: 'El horario de terrazas lo fija la ordenanza. «Cuando se vaya el último» no es una hora.' },
+  { id: 'zas', label: 'Declaración', type: 'check', text: 'Me comprometo a no arrastrar sillas a partir de las 23:00 (ordenanza de ruidos)', ok: true, err: 'Debe comprometerse a no arrastrar sillas. Es el artículo más importante de la ordenanza.' },
+  { id: 'tasa', label: 'Tasa', type: 'check', text: 'Adjunto justificante de pago de la tasa anual de ocupación de vía pública (640 €)', ok: true, err: 'Sin tasa no hay terraza.' },
+];
+async function licenciaTerraza() {
+  if (Day.running) { toast('La licencia de terraza es presencial: hazla por la mañana, antes de abrir.', 'warn'); return; }
+  $('#phone').classList.add('hidden'); phoneOnClose = null;
+  const pass = await ventanilla('Ajuntament · Ocupación de vía pública'); if (pass === null) return;
+  const r = await fillForm({ org: 'Ajuntament de Cala Tramita · Vía Pública', title: 'Licencia de ocupación de vía pública con terraza', intro: 'Mesas, sillas y sombrillas en el paseo marítimo.', fields: F_TERRAZA, submit: 'Entregar en ventanilla' });
+  if (!r) { toast('Te vas sin entregar nada. Mañana, otra cola.', 'warn'); return nextDay(); }
+  money(-640, 'Tasa anual de ocupación de vía pública (terraza)');
+  if (r.errs.length) { addXp(5); await stampResult(false, 'Licencia de terraza', ['Defectos:', ...r.errs.map(e => '• ' + e)]); return nextDay(); }
+  S.upgrades.terrazaLic = true; addXp(40);
+  await stampResult(true, 'Licencia de terraza', ['Concedida para 4 mesas hasta las 00:00. Ni una silla más.']);
+  return nextDay();
+}
+registerApp({ id: 'mejoras', icon: '🛠️', name: 'Mejoras', color: '#ffb36b', render(c) {
+  const lvl = level(), canWin = S.money >= 45000 && S.rep >= 4.5 && lvl >= 5;
+  c.innerHTML = MEJORAS.map(m => `<div class="item"><h4><span>${m.icon} ${m.name}</span><span>${eur(m.price)}</span></h4><div class="muted">${m.desc}</div>
+    <div class="btns" style="justify-content:flex-start;margin-top:5px">${m.has() ? '<span class="tag ok">INSTALADA</span>' : `<button class="btn pri" data-m="${m.id}" ${S.money < m.price || Day.running ? 'disabled' : ''}>Comprar</button>`}</div></div>`).join('')
+    + `<div class="item"><h4><span>📜 Licencia de terraza</span>${S.upgrades.terrazaLic ? '<span class="tag ok">CONCEDIDA</span>' : '<span class="tag no">SIN LICENCIA</span>'}</h4><div class="muted">Ocupación de vía pública. Trámite presencial (te ocupa el día). Tasa: 640 €.</div>
+      ${S.upgrades.terrazaLic ? '' : `<div class="btns" style="justify-content:flex-start;margin-top:5px"><button class="btn azul" id="mLic" ${Day.running ? 'disabled' : ''}>Pedir licencia</button></div>`}</div>
+    <div class="item"><h4><span>🏆 Segunda franquicia</span><span>${eur(45000)}</span></h4><div class="muted">Requisitos: 45.000 € en el banco (tienes ${eur(S.money)}), reputación ≥ 4,5 (tienes ${S.rep.toFixed(1)}) y Nivel de Burocracia ≥ 5 (tienes ${lvl}).</div>
+      <div class="btns" style="justify-content:flex-start;margin-top:5px"><button class="btn ok" id="mWin" ${canWin ? '' : 'disabled'}>Abrir segunda franquicia</button></div></div>
+    ${Day.running ? '<p class="muted">Las obras, fuera del horario de servicio.</p>' : ''}`;
+  c.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    const m = MEJORAS.find(x => x.id === b.dataset.m);
+    gasto(r2(m.price / 1.21), TIPO.ivaGen, `Compra: ${m.name}`); m.buy(); applyUpgrades(); addXp(10); SFX.cash();
+    toast(`${m.icon} ${m.name} instalada.${m.id === 'terraza' && !S.upgrades.terrazaLic ? ' ¡Ojo! Sin licencia de terraza, la Policía Local vendrá a verte.' : ''}`, m.id === 'terraza' ? 'warn' : 'good', 4500);
+    openApp('mejoras');
+  });
+  const lic = c.querySelector('#mLic'); if (lic) lic.onclick = () => licenciaTerraza();
+  const win = c.querySelector('#mWin'); if (win) win.onclick = () => {
+    money(-45000, 'Segunda franquicia: Burger Cala Tramita II');
+    S.over = { type: 'franquicia', text: `¡Abres <b>Burger Cala Tramita II</b> en el pueblo de al lado! Ahora tienes el doble de hamburguesas... y el doble de papeleo. Nivel de Burocracia: <b>${LEVELS[level() - 1]}</b>.` };
+    save(); $('#phone').classList.add('hidden'); phoneOnClose = null; gameOver();
+  };
+} });
+
+/* terraza 3D */
+(function buildTerraza() {
+  const grp = new THREE.Group(); scene.add(grp); grp.visible = false;
+  const cols = [];
+  for (const x of [-6, -3.5, 3.5, 6]) {
+    const z = 9.5;
+    cyl(.5, .5, .05, 0xffffff, x, .75, z, grp, 10); cyl(.05, .05, .74, 0x555555, x, .37, z, grp);
+    cyl(.03, .03, 2.3, 0xdddddd, x, 1.15, z, grp); cyl(0, 1.4, .5, x < 0 ? 0xe2724b : 0x1d7fbf, x, 2.4, z, grp, 8);
+    cols.push(collide(x, z, 1, 1));
+  }
+  const cartel = textSprite('☀️ TERRAZA', { bg: '#ffcd3c', h: .3 }); cartel.position.set(0, 1.6, 11.5); grp.add(cartel);
+  Hooks.apply.push(() => { grp.visible = !!S.upgrades.terraza; for (const c of cols) c.on = grp.visible; });
+})();
+
 /* ==== FASES SIGUIENTES ==== */
 
 /* =====================================================================
@@ -1800,7 +2239,7 @@ function begin(state, fresh) {
 }
 $('#bNew').onclick = () => { const s = newState(); if (!window.introFase0) s.open = true; begin(s, true); };
 $('#bCont').onclick = () => begin(Object.assign(newState(), prev), false);
-window.__gtb = { get S() { return S; }, workers: () => window.__workers, Day, customers, stations, player, spawnCustomer, serve, setHand, doInteract, get target() { return target; }, openPhone, closeModal, modal };
+window.__gtb = { get S() { return S; }, workers: () => window.__workers, applyUpgrades, Day, customers, stations, player, spawnCustomer, serve, setHand, doInteract, get target() { return target; }, openPhone, closeModal, modal };
 requestAnimationFrame(frame);
 </script>
 </body>

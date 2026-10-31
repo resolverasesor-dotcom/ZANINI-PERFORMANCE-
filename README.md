@@ -332,10 +332,43 @@ Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart) y `?s
 
 # GRAN THEFT BUROCRAZY (`burocrazy/`)
 
-Juego independiente en primera persona: sátira de la burocracia española. Un único
-archivo `burocrazy/index.html` (Three.js desde CDN). Basta con abrirlo en el navegador
-o servir la carpeta con cualquier servidor estático. Guarda la partida en `localStorage`.
+Juego independiente en primera persona: sátira cómica de la burocracia española.
+Abres una hamburguesería en **Cala Tramita**, un pueblo de la costa mediterránea.
+Cocinar es fácil. El papeleo, no.
 
-Controles: **WASD + ratón** (clic para capturar el ratón), **E / clic** para interactuar,
-**Tab / M** para el móvil del personaje. En móvil: joystick virtual, arrastrar a la
-derecha para mirar, botones **ACCIÓN** y **📱**.
+Es un único archivo, `burocrazy/index.html` (Three.js 0.170 desde jsDelivr). Basta con
+abrirlo en el navegador o servir la carpeta con cualquier servidor estático. La partida
+se guarda sola al final de cada día en `localStorage`.
+
+**Controles.** PC: **WASD + ratón** (clic para capturar el ratón), **E / clic** para
+coger, dejar, servir y hablar, **Tab / M** para el móvil, **Esc** para pausar.
+Móvil: joystick virtual, arrastrar en la mitad derecha para mirar, botones **ACCIÓN** y **📱**.
+
+### Cómo se juega
+
+- **Fase 0 · Antes de abrir.** Cinco trámites como minijuegos de formulario: alta censal
+  (modelo 036, epígrafe IAE 671.5), alta en el RETA, licencia de actividad, manipulador de
+  alimentos y registro sanitario, y hojas de reclamaciones. Hay cita previa, cola con número,
+  ventanilla cerrada («vuelva usted mañana»), sede electrónica caprichosa y un certificado
+  digital que caduca. Cada intento te ocupa el día; un dato mal y se rechaza.
+- **Fase 1 · Cocina.** Coge pan, carne y extras; la carne se hace en la plancha (cruda,
+  perfecta o quemada), se monta en la tabla según la comanda y se sirve al cliente. Los
+  clientes tienen paciencia limitada y dejan propina según rapidez y calidad. Cada jornada
+  dura 3,5 minutos reales (13:00–23:00) y termina con el cierre de caja.
+- **Fase 2 · Personal.** Tablón de candidatos con personalidad (el lento pero perfecto, el
+  rápido que lo quema todo, el que llega tarde, el del móvil, el simpático, el currante).
+  Antes de que trabajen: inscripción de la empresa (CCC), alta en la Seguridad Social **antes**
+  del primer día y contrato en Contrat@ coherente con el alta. Puedes hablar con ellos (botones o
+  texto libre, interpretado por una «IA» local) y su moral cambia. Si alguien trabaja sin alta y
+  llega la Inspección de Trabajo, la multa es enorme.
+- **Fase 3 · Calendario fiscal y laboral.** Nóminas y cotizaciones mensuales; modelos 303, 130,
+  111 y 115 trimestrales; 390, 190 y 180 anuales; registro de jornada diario. Avisos en el móvil,
+  recargos por presentar tarde, liquidaciones de oficio y un asesor que lo hace por ti (con chistes
+  de asesoría) a cambio de una cuota mensual.
+- **Eventos.** Inspección de Trabajo, inspección sanitaria, cliente que pide la hoja de
+  reclamaciones, requerimiento de Hacienda, vacaciones en agosto, caída de la sede electrónica,
+  influencer gastronómico, mercadillo y fiestas del pueblo con avalancha de clientes.
+- **Progresión.** Segunda plancha, freidora, carta ampliada y terraza (que necesita su propia
+  licencia de ocupación de vía pública). Reputación en estrellas y Nivel de Burocracia.
+  La partida acaba en quiebra, cierre por sanción o abriendo una segunda franquicia
+  (45.000 €, reputación 4,5 y Nivel de Burocracia 5).
