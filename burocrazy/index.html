@@ -185,7 +185,7 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
       <div><b>WASD</b> moverse · <b>Ratón</b> mirar</div>
       <div><b>E / clic</b> coger, dejar, servir, hablar</div>
       <div><b>Tab / M</b> móvil (personal, calendario, trámites, banco)</div>
-      <div><b>Esc</b> pausa</div>
+      <div><b>Esc</b> pausa · si el ratón no se captura: <b>arrastra</b> para mirar y clic corto para usar</div>
     </div>
   </div>
 </div>
@@ -617,7 +617,15 @@ function movePlayer(dx, dz) {
 /* ratón / teclado */
 const canvas = renderer.domElement;
 const locked = () => document.pointerLockElement === canvas;
-function lockPointer() { if (!isTouch && canvas.requestPointerLock && !locked()) { try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) {} } }
+/* si el navegador no deja capturar el ratón (p. ej. dentro de un marco), se mira arrastrando */
+let lockFailed = false;
+document.addEventListener('pointerlockerror', () => { lockFailed = true; });
+function lockPointer() {
+  if (isTouch || locked()) return;
+  if (!canvas.requestPointerLock) { lockFailed = true; return; }
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => { lockFailed = true; }); } catch (e) { lockFailed = true; }
+}
+const drag = { on: false, moved: 0 };
 addEventListener('keydown', e => {
   audio();
   keys[e.code] = true;
@@ -628,14 +636,26 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('mousemove', e => {
-  if (!locked()) return;
+  if (!locked()) {
+    if (!drag.on || uiBlocking()) return;
+    drag.moved += Math.abs(e.movementX) + Math.abs(e.movementY);
+    player.yaw -= e.movementX * .005; player.pitch = clamp(player.pitch - e.movementY * .005, -1.35, 1.2);
+    return;
+  }
   player.yaw -= e.movementX * .0022; player.pitch = clamp(player.pitch - e.movementY * .0022, -1.35, 1.2);
 });
 canvas.addEventListener('mousedown', e => {
   audio();
   if (uiBlocking()) return;
-  if (!locked()) { lockPointer(); return; }
+  if (!locked()) {
+    if (lockFailed) { drag.on = true; drag.moved = 0; return; }
+    lockPointer(); return;
+  }
   if (e.button === 0) doInteract();
+});
+addEventListener('mouseup', () => {
+  if (drag.on && !uiBlocking() && drag.moved < 6) doInteract();
+  drag.on = false;
 });
 document.addEventListener('pointerlockchange', () => { if (!locked()) for (const k in keys) keys[k] = false; });
 
@@ -1144,7 +1164,7 @@ async function gameOver() {
     <p style="margin-top:14px">${o.text}</p>
     <p class="muted">Días de juego: ${S.day} · clientes servidos: ${S.stats.served} · nivel de burocracia: ${LEVELS[level() - 1]}</p></div>`,
     [{ label: 'Nueva partida', cls: 'pri', value: true }]);
-  localStorage.removeItem(SAVE_KEY); location.reload();
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload();
 }
 
 /* =====================================================================
@@ -1191,7 +1211,10 @@ registerApp({ id: 'ajustes', icon: '⚙️', name: 'Ajustes', color: '#ddd', ren
   c.querySelector('#aMus').onchange = e => setMusic(e.target.checked);
   c.querySelector('#aTut').onchange = e => { S.flags.tutDone = !e.target.checked; };
   c.querySelector('#aSave').onclick = () => { save(); toast('Partida guardada.', 'good'); };
-  c.querySelector('#aReset').onclick = () => { if (confirm('¿Seguro? Se perderá todo, como un expediente sin registrar.')) { localStorage.removeItem(SAVE_KEY); location.reload(); } };
+  c.querySelector('#aReset').onclick = async () => {
+    const ok = await modal('<h2>🗑️ Borrar partida</h2><p>¿Seguro? Se perderá todo, como un expediente sin registrar.</p>', [{ label: 'Cancelar', value: false }, { label: 'Borrar', cls: 'mal', value: true }]);
+    if (ok) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); }
+  };
 } });
 
 /* =====================================================================
@@ -1217,7 +1240,7 @@ function updateTickets() {
 let last = performance.now();
 function frame(now) {
   const dt = Math.min(.05, (now - last) / 1000); last = now;
-  const pausedByLock = Day.running && !isTouch && !locked() && !uiBlocking();
+  const pausedByLock = Day.running && !isTouch && !locked() && !lockFailed && !uiBlocking();
   $('#pausa').classList.toggle('hidden', !pausedByLock);
   $('#btnDay').classList.toggle('hidden', !walking || uiBlocking());
   const paused = uiBlocking() || pausedByLock;
