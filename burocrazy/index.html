@@ -34,6 +34,9 @@ button{font:inherit;cursor:pointer}
 #cross{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px rgba(0,0,0,.4)}
 #hint{position:absolute;left:50%;top:calc(50% + 22px);transform:translateX(-50%);background:rgba(35,32,28,.82);color:#fff;padding:4px 10px;border-radius:8px;font-size:15px;white-space:nowrap}
 #hand{position:absolute;left:10px;bottom:10px;background:rgba(255,250,240,.92);border:3px solid var(--tinta);border-radius:12px;padding:6px 10px;font-weight:bold;box-shadow:var(--sombra);font-size:15px}
+#tut{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:min(520px,70vw);background:#fffaf0;border:3px solid var(--tinta);border-radius:12px;padding:7px 12px;font-size:15px;box-shadow:var(--sombra);pointer-events:auto;text-align:center}
+#tut a{color:var(--mar2)}
+@media (max-width:640px){#tut{bottom:auto;top:96px;left:8px;transform:none;width:calc(100% - 166px);font-size:12px;padding:5px 7px}}
 #toasts{position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none;width:min(560px,94vw)}
 .toast{background:var(--cal);border:3px solid var(--tinta);border-radius:12px;padding:7px 12px;font-size:15px;box-shadow:var(--sombra);animation:pop .25s ease-out;text-align:center}
 .toast.good{background:#c9f2d6}.toast.bad{background:#ffd0c8}.toast.info{background:#d6ecff}.toast.warn{background:#fff0b3}
@@ -156,6 +159,7 @@ table.res tr.tot td{border-top:3px solid var(--tinta);border-bottom:none;font-si
   <div id="cross"></div>
   <div id="hint" class="hidden"></div>
   <div id="hand">Manos vacías</div>
+  <div id="tut" class="hidden"></div>
   <button class="btn pri hidden" id="btnDay" style="position:absolute;right:10px;bottom:10px;pointer-events:auto">☀️ Volver al día (Enter)</button>
 </div>
 <div id="toasts"></div>
@@ -715,14 +719,14 @@ function doInteract() {
   const it = hand.item;
   switch (a.t) {
     case 'bin':
-      if (!it) { setHand({ kind: 'ing', type: a.ing, cook: 0 }); Day.costs += ING[a.ing].cost; SFX.pick(); }
+      if (!it) { setHand({ kind: 'ing', type: a.ing, cook: 0 }); Day.costs += ING[a.ing].cost; SFX.pick(); tut('take_' + a.ing); }
       else if (it.kind === 'ing' && it.type === a.ing && !(a.ing === 'carne' && it.cook > 0)) { Day.costs -= ING[a.ing].cost; setHand(null); SFX.drop(); }
       else toast('Tienes las manos ocupadas. Usa la basura o una tabla de montaje.', 'warn', 1800);
       break;
     case 'grill': {
       const s = a.slot;
-      if (!s.patty && it && it.type === 'carne') { s.patty = { cook: it.cook }; s.mesh = ingMesh('carne', it.cook); s.mesh.position.set(s.x, s.y, s.z); scene.add(s.mesh); setHand(null); SFX.drop(); }
-      else if (s.patty && !it) { setHand({ kind: 'ing', type: 'carne', cook: s.patty.cook }); scene.remove(s.mesh); s.patty = null; s.mesh = null; SFX.pick(); }
+      if (!s.patty && it && it.type === 'carne') { s.patty = { cook: it.cook }; s.mesh = ingMesh('carne', it.cook); s.mesh.position.set(s.x, s.y, s.z); scene.add(s.mesh); setHand(null); SFX.drop(); tut('grill_put'); }
+      else if (s.patty && !it) { setHand({ kind: 'ing', type: 'carne', cook: s.patty.cook }); if (cookLabel(s.patty.cook) === 'perfecta') tut('grill_take'); else if (Tut.on) toast(`Carne ${cookLabel(s.patty.cook)}. Lo ideal: cogerla con la barra en verde.`, 'warn'); scene.remove(s.mesh); s.patty = null; s.mesh = null; if (s.bar) s.bar.visible = false; SFX.pick(); }
       else if (!s.patty && it) toast('En la plancha solo va la carne. Lo demás, a la tabla de montaje.', 'warn', 1800);
       break;
     }
@@ -738,8 +742,9 @@ function doInteract() {
       if (it && it.kind === 'ing' && st.plate) {
         if (st.plate.items.length >= 12) { toast('¡Eso ya no es una hamburguesa, es un edificio sin licencia!', 'warn'); break; }
         st.plate.items.push({ type: it.type, cook: it.cook }); setHand(null); refreshBoard(st); SFX.drop();
+        tut('board_' + it.type); if (st.plate.items.filter(x => x.type === 'pan').length >= 2 && st.plate.items.some(x => x.type === 'carne')) tut('board_top');
       } else if (it && it.kind === 'plate' && !st.plate) { st.plate = it; setHand(null); refreshBoard(st); SFX.drop(); }
-      else if (!it && st.plate && st.plate.items.length) { setHand({ kind: 'plate', items: st.plate.items }); st.plate = { items: [] }; refreshBoard(st); SFX.pick(); }
+      else if (!it && st.plate && st.plate.items.length) { setHand({ kind: 'plate', items: st.plate.items }); st.plate = { items: [] }; refreshBoard(st); SFX.pick(); tut('plate'); }
       else if (!it) toast('El plato está vacío. Trae ingredientes.', 'info', 1500);
       break;
     }
@@ -831,7 +836,7 @@ function spawnCustomer(opts = {}) {
   g.position.set(rnd(-.6, .6), 0, 15); scene.add(g);
   const c = {
     g, spot, name: opts.name || pick(NOMBRES_C), order: genOrder(vip), state: 'in', vip,
-    patience: 1, patienceMax: (vip ? 50 : rnd(65, 95)) * (spot.terraza ? 1.15 : 1), waited: 0,
+    patience: 1, patienceMax: (vip ? 50 : rnd(65, 95)) * (spot.terraza ? 1.15 : 1) * (S.stats.days === 0 ? 1.6 : 1), waited: 0,
     path: spot.terraza ? [[spot.x, 12], [spot.x, spot.z]] : [[0, 7], [0, 1.2], [spot.x, 1.2], [spot.x, spot.z]],
     bar: barSprite(), tag: null, servedBy: null, walk: 0,
   };
@@ -891,7 +896,7 @@ function evalPlate(items, order) {
 }
 function serve(c, items, by = null) {
   const r = evalPlate(items, c.order);
-  if (!by) setHand(null);
+  if (!by) { setHand(null); tut('serve'); }
   c.state = 'served';
   let paid = 0, tip = 0, msg;
   if (r.raw) { Day.rawServed += r.raw; }
@@ -936,7 +941,7 @@ async function startService() {
 function endService() {
   Day.running = false;
   for (const c of customers) if (c.state !== 'out') leave(c, '👋');
-  for (let p = 0; p < 2; p++) for (const s of stations['plancha' + p].slots) { if (s.mesh) scene.remove(s.mesh); s.patty = null; s.mesh = null; }
+  for (let p = 0; p < 2; p++) for (const s of stations['plancha' + p].slots) { if (s.mesh) scene.remove(s.mesh); s.patty = null; s.mesh = null; if (s.bar) s.bar.visible = false; }
   stations.freidora.state = 'idle';
   for (let i = 0; i < 2; i++) { stations['tabla' + i].plate = { items: [] }; refreshBoard(stations['tabla' + i]); }
   setHand(null); setSizzle(0);
@@ -951,6 +956,8 @@ function updateDay(dt) {
     cooking++; s.patty.cook += dt / COOK.secs;
     s.mesh.userData.meat.material.color.copy(meatColor(s.patty.cook));
     s.mesh.position.y = s.y + Math.abs(Math.sin(performance.now() / 90)) * .004;
+    if (!s.bar) { s.bar = cookBar(); s.bar.position.set(s.x, s.y + .42, s.z + .1); scene.add(s.bar); }
+    s.bar.visible = true; drawCookBar(s.bar, s.patty.cook);
   }
   setSizzle(cooking);
   const fr = stations.freidora;
@@ -968,6 +975,82 @@ function updateDay(dt) {
   for (const h of Hooks.update) h(dt);
   if (Day.t >= DAY_LEN) endService();
 }
+
+
+/* barra de punto encima de cada hueco de la plancha: rojo crudo · verde perfecto · negro quemado */
+function cookBar() {
+  const c = document.createElement('canvas'); c.width = 160; c.height = 30;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false })); sp.scale.set(.5, .095, 1); sp.renderOrder = 10; sp.userData.c = c; return sp;
+}
+function drawCookBar(sp, cook) {
+  const c = sp.userData.c, x = c.getContext('2d'), W = 160, MAX = 1.4, X = v => 4 + (W - 8) * v / MAX;
+  if (sp.userData.last === Math.round(cook * 60)) return; sp.userData.last = Math.round(cook * 60);
+  x.fillStyle = '#23201c'; x.fillRect(0, 0, W, 30);
+  x.fillStyle = '#e0607a'; x.fillRect(X(0), 6, X(COOK.raw) - X(0), 18);
+  x.fillStyle = '#3aa66a'; x.fillRect(X(COOK.raw), 6, X(COOK.burnt) - X(COOK.raw), 18);
+  x.fillStyle = '#555'; x.fillRect(X(COOK.burnt), 6, X(MAX) - X(COOK.burnt), 18);
+  const px = X(Math.min(cook, MAX));
+  x.fillStyle = '#fff'; x.fillRect(px - 3, 0, 6, 30);
+  sp.material.map.needsUpdate = true;
+}
+
+/* tutorial guiado del primer servicio */
+const TUT_STEPS = [
+  { ev: 'take_carne', txt: 'Ve a la nevera <b>🥩 CARNE</b> (fondo a la izquierda) y coge una hamburguesa.' },
+  { ev: 'grill_put', txt: 'Ponla en un hueco de la <b>🔥 PLANCHA</b>. Encima saldrá una barra con el punto.' },
+  { ev: 'board_pan', txt: 'Mientras se hace: coge <b>🍞 PAN</b> de la isla y déjalo en la tabla <b>🍽 MONTAJE</b>.' },
+  { ev: 'grill_take', txt: 'Vuelve a la plancha y coge la carne cuando la barra esté en <b style="color:#1d7a43">VERDE</b>.' },
+  { ev: 'board_carne', txt: 'Pon la carne en la tabla de montaje, encima del pan.' },
+  { ev: 'board_top', txt: 'Añade los extras de la comanda (arriba a la derecha) y cierra con otro <b>🍞 PAN</b>.' },
+  { ev: 'plate', txt: 'Coge el plato montado de la tabla.' },
+  { ev: 'serve', txt: 'Mira al cliente en la barra y pulsa <b>E</b> para servirle. ¡Cobra!' },
+];
+const Tut = { on: false, i: 0 };
+function tut(ev) {
+  if (!Tut.on) return;
+  const j = TUT_STEPS.findIndex((st, k) => k >= Tut.i && st.ev === ev);
+  if (j < 0) return;
+  Tut.i = j + 1; SFX.pick();
+  if (Tut.i >= TUT_STEPS.length) { Tut.on = false; S.flags.tutDone = true; toast('🎓 ¡Tutorial completado! Ahora, a por la clientela. Y que no se te olvide el papeleo.', 'good', 5000); }
+  drawTut();
+}
+function drawTut() {
+  const el = $('#tut'); el.classList.toggle('hidden', !Tut.on);
+  if (!Tut.on) return;
+  el.innerHTML = `<div class="muted">Primer servicio · paso ${Tut.i + 1}/${TUT_STEPS.length} <a href="#" id="tutSkip">saltar</a></div>${TUT_STEPS[Tut.i].txt}`;
+  el.querySelector('#tutSkip').onclick = ev => { ev.preventDefault(); Tut.on = false; S.flags.tutDone = true; drawTut(); };
+}
+Hooks.dayStart.push(() => { Tut.on = !S.flags.tutDone; Tut.i = 0; drawTut(); });
+Hooks.dayEnd.push(() => { Tut.on = false; drawTut(); return null; });
+
+/* música procedural: cadencia andaluza (Am–G–F–E) con guitarra punteada y bajo */
+const Music = { on: (() => { try { return localStorage.getItem('gtb_music') !== '0'; } catch (e) { return true; } })(), timer: null, step: 0, next: 0, gain: null };
+const CHORDS = [[57, 60, 64], [55, 59, 62], [53, 57, 60], [52, 56, 59]];
+const midi = n => 440 * Math.pow(2, (n - 69) / 12);
+function pluck(a, freq, t, dur, vol, type = 'triangle') {
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + .008); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g).connect(Music.gain); o.start(t); o.stop(t + dur + .05);
+}
+function musicTick() {
+  const a = actx; if (!a || !Music.on) return;
+  if (!Music.gain) { Music.gain = a.createGain(); Music.gain.connect(a.destination); }
+  Music.gain.gain.setTargetAtTime(Day.running ? .5 : .25, a.currentTime, .5);
+  const spb = 60 / 104 / 2; // corcheas a 104 ppm
+  if (Music.next < a.currentTime) Music.next = a.currentTime + .05;
+  while (Music.next < a.currentTime + .25) {
+    const st = Music.step, ch = CHORDS[Math.floor(st / 8) % 4], k = st % 8, t = Music.next;
+    if (k === 0 || k === 3 || k === 6) pluck(a, midi(ch[0] - 12), t, .5, .07, 'sine');
+    const pat = [0, 1, 2, 1, 2, 1, 0, 2][k];
+    pluck(a, midi(ch[pat] + (k === 7 && Math.floor(st / 8) % 4 === 3 ? 1 : 0)), t, .35, .035);
+    if (k === 0 || k === 4) pluck(a, midi(ch[2] + 12), t, .2, .012, 'square');
+    Music.step++; Music.next += spb * (k % 2 ? .92 : 1.08);
+  }
+}
+function setMusic(on) { Music.on = on; try { localStorage.setItem('gtb_music', on ? '1' : '0'); } catch (e) {} if (!on && Music.gain && actx) Music.gain.gain.setTargetAtTime(0, actx.currentTime, .1); }
+setInterval(musicTick, 100);
 
 /* =====================================================================
    PANTALLAS: modal genérico, resumen, preparación
@@ -1101,8 +1184,12 @@ registerApp({ id: 'banco', icon: '🏦', name: 'Banco', color: '#9fd3ff', render
   <h4>Últimos movimientos</h4>` + (S.bank.length ? S.bank.slice(0, 40).map(m => `<div class="item"><h4><span>${esc(m.concept)}</span><span class="${m.amount < 0 ? 'negt' : 'pos'}">${eur(m.amount)}</span></h4><div class="muted">${fshort(m.day)}</div></div>`).join('') : '<p class="muted">Sin movimientos. Bueno, la comisión de mantenimiento llegará.</p>');
 } });
 registerApp({ id: 'ajustes', icon: '⚙️', name: 'Ajustes', color: '#ddd', render(c) {
-  c.innerHTML = `<div class="item"><h4>Partida</h4><p class="muted">Se guarda sola al acabar cada día (localStorage).</p>
+  c.innerHTML = `<div class="item"><h4>Sonido</h4><label class="opt"><input type="checkbox" id="aMus" ${Music.on ? 'checked' : ''}> Música (guitarra mediterránea)</label>
+  <label class="opt"><input type="checkbox" id="aTut" ${S.flags.tutDone ? '' : 'checked'}> Tutorial de cocina en el próximo servicio</label></div>
+  <div class="item"><h4>Partida</h4><p class="muted">Se guarda sola al acabar cada día (localStorage).</p>
   <div class="btns" style="justify-content:flex-start"><button class="btn ok" id="aSave">Guardar ahora</button><button class="btn mal" id="aReset">Borrar partida</button></div></div>`;
+  c.querySelector('#aMus').onchange = e => setMusic(e.target.checked);
+  c.querySelector('#aTut').onchange = e => { S.flags.tutDone = !e.target.checked; };
   c.querySelector('#aSave').onclick = () => { save(); toast('Partida guardada.', 'good'); };
   c.querySelector('#aReset').onclick = () => { if (confirm('¿Seguro? Se perderá todo, como un expediente sin registrar.')) { localStorage.removeItem(SAVE_KEY); location.reload(); } };
 } });
