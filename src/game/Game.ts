@@ -64,6 +64,20 @@ const MODE_INFO: Record<Mode, { title: string; desc: string; icon: string }> = {
   championship: { title: 'Campeonato', desc: '6 Grandes Premios. ¿Te llevarás el título?', icon: '🏆' },
 };
 
+/** Consejos de la pantalla de carga. */
+const TIPS = [
+  'Frena en recta y suelta el freno al girar: el kart entra solo.',
+  'El copiloto canta la curva: 1 es muy cerrada, 6 casi a fondo. «U» es una horquilla.',
+  'Si sale «FRENA», ya vas tarde. La próxima vez, un poco antes.',
+  'El saltito ayuda a salir de las horquillas lentas. En recta no sirve de nada.',
+  'Pégate detrás de otro kart en las rectas: el rebufo regala velocidad.',
+  'Un poco de derrape es rápido. Mucho derrape es bonito… y lento.',
+  'Los carteles 150 · 100 · 50 son tus referencias de frenada.',
+  'Pisar el piano no frena. Pisar la hierba, mucho.',
+  'Cada kart del garaje se conduce distinto. Prueba la Saeta si te gusta ir de lado.',
+  'Tecla C: cambia de cámara. La de TV es para presumir.',
+];
+
 const POINTS_LEGEND = '25-18-15-12-10-8-6-4-2-1 · +1 vuelta rápida (top 10)';
 
 export class Game {
@@ -565,7 +579,7 @@ export class Game {
     this.tryLandscape();
     this.screen.innerHTML = '';
     this.screen.className = 'screen hidden';
-    const loading = el('div', 'loading', `${logoHTML('small')}<div class="loading-txt">Cargando ${esc(getCircuit(setup.trackId).name)}…</div>`);
+    const loading = el('div', 'loading', `${logoHTML('small')}<div class="loading-txt">Cargando ${esc(getCircuit(setup.trackId).name)}…</div><div class="loading-bar"><i></i></div><div class="loading-tip">💡 ${esc(TIPS[Math.floor(Math.random() * TIPS.length)])}</div>`);
     this.ui.appendChild(loading);
     // Dejar pintar la pantalla de carga antes del trabajo pesado
     setTimeout(() => {
@@ -1170,7 +1184,8 @@ export class Game {
     } else if (tab === 'audio') {
       body = `${this.range('Volumen general', 'volume', s.volume)}${this.range('Efectos', 'sfx', s.sfx)}${this.range('Música', 'musicVolume', s.musicVolume)}
         ${this.choice('Música de menú', 'music', [['on', 'Activada'], ['off', 'Desactivada']], s.music ? 'on' : 'off')}
-        ${this.choice('Radio del equipo (comentarios de papá)', 'radio', [['on', 'Sí'], ['off', 'No']], s.radio !== false ? 'on' : 'off')}`;
+        ${this.choice('Radio del equipo (comentarios de papá)', 'radio', [['on', 'Sí'], ['off', 'No']], s.radio !== false ? 'on' : 'off')}
+        ${this.choice('Copiloto (notas de curva)', 'pnotes', [['visual', 'En pantalla'], ['voz', 'Pantalla + voz'], ['off', 'No']], s.pacenotes ?? 'visual')}`;
     } else if (tab === 'controles') {
       const rows = (Object.keys(ACTION_LABELS) as Action[])
         .map((a) => `<div class="keyrow"><span>${ACTION_LABELS[a]}</span><span class="keys">${s.keys[a].map(keyName).join(' / ')}</span><button class="btn sm" data-act="rebind" data-val="${a}">Cambiar</button></div>`)
@@ -1257,6 +1272,11 @@ export class Game {
         },
         touchsteer: (b) => {
           s.touchSteer = b.dataset.val as Settings['touchSteer'];
+          save();
+          re();
+        },
+        pnotes: (b) => {
+          s.pacenotes = b.dataset.val as Settings['pacenotes'];
           save();
           re();
         },

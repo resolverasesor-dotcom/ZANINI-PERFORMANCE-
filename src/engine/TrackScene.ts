@@ -197,7 +197,8 @@ export class TrackScene {
       side: THREE.BackSide,
       depthWrite: false,
       fog: false,
-      uniforms: { top: { value: new THREE.Color(this.look.skyTop) }, horizon: { value: new THREE.Color(this.look.skyHorizon) } },
+      // Los colores se pasan en sRGB (tal cual se diseñaron); el shader los lleva a lineal una sola vez
+      uniforms: { top: { value: new THREE.Color(this.look.skyTop).convertLinearToSRGB() }, horizon: { value: new THREE.Color(this.look.skyHorizon).convertLinearToSRGB() } },
       vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader:
         // El degradado se diseña "en pantalla"; se pasa a lineal para que la conversión

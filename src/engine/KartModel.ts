@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { blobTex, numberTex } from './textures';
 import { stickerTex } from './ads';
 import type { BodyStyle } from '../physics/chassis';
@@ -245,6 +245,21 @@ function wheelGeo(rear: boolean, hubColor: string): THREE.BufferGeometry {
   return g;
 }
 
+/** Contorno de ilustración: casco invertido, engordado a lo largo de las normales suavizadas. */
+const outlineMat = new THREE.MeshBasicMaterial({ color: '#0a0a10', side: THREE.BackSide });
+outlineMat.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', 'vec3 transformed = position + normal * 0.017;');
+};
+function outlineGeo(src: THREE.BufferGeometry): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', src.getAttribute('position').clone());
+  const m = mergeVertices(g, 2e-3);
+  m.computeVertexNormals();
+  g.dispose();
+  return m;
+}
+let helmetOutline: THREE.BufferGeometry | null = null;
+
 const lambertBody = new THREE.MeshLambertMaterial({ vertexColors: true });
 const wheelMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 const glossy = new Map<string, THREE.MeshStandardMaterial>();
@@ -301,6 +316,8 @@ export interface KartOptions {
   sponsor?: number;
   accent?: string;
   body?: BodyStyle;
+  /** Contorno oscuro de ilustración (calidad media/alta). */
+  outline?: boolean;
 }
 
 export function buildKart(colorIn: string, number: number, opts: KartOptions = {}): KartMesh {
@@ -322,6 +339,9 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
   const bodyMesh = new THREE.Mesh(buildKartBody(color, suit, livery, accent, opts.body), mat);
   bodyMesh.castShadow = !opts.ghost;
   body.add(bodyMesh);
+  if (opts.outline && !opts.ghost) {
+    body.add(new THREE.Mesh(outlineGeo(bodyMesh.geometry), outlineMat));
+  }
 
   // Casco con textura
   const helmetStyle: HelmetStyle = opts.helmet ?? 'clasico';
@@ -337,6 +357,13 @@ export function buildKart(colorIn: string, number: number, opts: KartOptions = {
   helmet.position.set(0, 1.0, -0.14);
   helmet.castShadow = !opts.ghost;
   body.add(helmet);
+  if (opts.outline && !opts.ghost) {
+    if (!helmetOutline) {
+      helmetOutline = new THREE.SphereGeometry(0.2, 16, 12);
+      helmetOutline.userData.shared = true;
+    }
+    helmet.add(new THREE.Mesh(helmetOutline, outlineMat));
+  }
   if (helmetStyle === 'corona' && !opts.ghost) {
     const gold = new THREE.MeshStandardMaterial({ color: '#f2c230', metalness: 0.9, roughness: 0.2 });
     mats.push(gold);

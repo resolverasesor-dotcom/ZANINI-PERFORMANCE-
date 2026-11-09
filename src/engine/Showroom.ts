@@ -87,7 +87,7 @@ export class Showroom {
       this.turntable.remove(this.kart.root);
       for (const m of this.kart.materials) m.dispose();
     }
-    this.kart = buildKart(look.color, look.number, { ...look, reflective: this.reflective });
+    this.kart = buildKart(look.color, look.number, { ...look, reflective: this.reflective, outline: this.reflective });
     this.kart.root.scale.setScalar(1.7);
     this.kart.root.position.y = 0.16;
     this.kart.root.visible = !this.preview;

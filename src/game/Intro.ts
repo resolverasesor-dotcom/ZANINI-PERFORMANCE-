@@ -368,7 +368,7 @@ export class Intro {
     sc.add(outside);
 
     // ---------- El kart ----------
-    this.kart = buildKart(look.color, look.number, { ...look, reflective });
+    this.kart = buildKart(look.color, look.number, { ...look, reflective, outline: reflective });
     sc.add(this.kart.root);
     // Sábana: un bulto blanco que cubre el kart
     const sg = new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);

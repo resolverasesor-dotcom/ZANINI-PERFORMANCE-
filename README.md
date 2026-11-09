@@ -26,6 +26,7 @@ npm run test:ai       # 12 IA corren una carrera en cada circuito: nadie se atas
 npm run test:assists  # comprueba que las ayudas mantienen en pista a un jugador torpe
 npm run test:physics  # banco de dinámica del kart
 npm run test:chassis  # modelos de kart: tiempos equilibrados (±1,5 %) y carácter de cada uno
+npm run test:notes    # notas de copiloto coherentes en todos los circuitos
 ```
 
 ## Intro
@@ -79,6 +80,21 @@ Bastidor de tubos y barras laterales visibles, disco de freno con pinza roja, co
 aletas del cilindro y caja de admisión, **escape de expansión** del dos tiempos, radiador lateral, panel
 frontal, piloto con brazos hasta el volante, guantes, botas y protector de costillas, y **neumáticos con
 hombros redondeados, flanco y llantas de 5 radios**.
+
+## Copiloto: notas de curva
+
+Como en los rallies, pero para karting: antes de cada curva aparece su **nota** con una flecha, la
+**severidad** (1 = muy cerrada … 6 = casi a fondo, **U** = horquilla), matices (*larga*, *cierra*, *abre*,
+*enlaza*), la distancia y la **velocidad recomendada**. Si llegas pasado, avisa **FRENA**. Cuanto más
+rápido vas, antes la canta. Las notas se generan solas a partir de la curvatura de cada trazado
+(`src/race/pacenotes.ts`, comprobadas con `npm run test:notes`). En *Ajustes → Audio* se elige: en
+pantalla, pantalla + **voz** (síntesis del navegador) o apagado.
+
+## Dirección de arte
+
+Superficies "pintadas" (manchas suaves en lugar de ruido), césped con franjas de corte, **contorno
+oscuro de ilustración** en los karts (calidad media/alta), gradación con curva suave y virado
+frío/cálido, y cielos con los tonos exactos de cada ambiente.
 
 ## Radio del equipo
 

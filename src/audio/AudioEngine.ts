@@ -646,6 +646,12 @@ export class AudioEngine {
     });
   }
 
+  /** Aviso de nota de copiloto (dos pitidos cortos). */
+  noteTick(): void {
+    this.tone(1480, 0.05, 'sine', 0.07);
+    this.tone(1976, 0.07, 'sine', 0.07, 0.07);
+  }
+
   /** Chasquido de la radio del equipo. */
   radioClick(): void {
     this.noiseBurst(0.06, 0.12, 2200, 'bandpass');

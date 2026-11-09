@@ -1,6 +1,8 @@
 import { filterSteer } from '../core/steerFilter';
 import { BrakeFilter } from '../core/brakeFilter';
 import { TeamRadio } from '../ui/TeamRadio';
+import { PaceNoteHud } from '../ui/PaceNotes';
+import { buildPaceNotes } from '../race/pacenotes';
 import * as THREE from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { DIFF_SPEED, type Difficulty } from '../ai/Drivers';
@@ -99,7 +101,7 @@ class KartView {
     scene: THREE.Scene,
     reflective: boolean,
   ) {
-    this.mesh = buildKart(comp.e.color, comp.e.number, { ...(comp.e.look ?? {}), reflective });
+    this.mesh = buildKart(comp.e.color, comp.e.number, { ...(comp.e.look ?? {}), reflective, outline: reflective });
     this.mesh.root.rotation.order = 'YXZ';
     scene.add(this.mesh.root);
   }
@@ -303,6 +305,10 @@ export class RaceView {
     );
     this.hud = new Hud(ctx.uiRoot);
     this.radio = new TeamRadio(ctx.uiRoot, () => ctx.audio.radioClick());
+    this.pnotes = new PaceNoteHud(ctx.uiRoot, buildPaceNotes(this.track), this.track.length, () => ctx.audio.noteTick());
+    const pm = ctx.settings.pacenotes ?? 'visual';
+    this.pnotes.enabled = pm !== 'off' && setup.label !== 'Tutorial';
+    this.pnotes.voice = pm === 'voz';
     this.radio.enabled = ctx.settings.radio !== false && setup.label !== 'Tutorial';
     this.minimap = new Minimap(this.track, window.innerWidth < 700 ? 110 : 170);
     this.hud.mapSlot.appendChild(this.minimap.canvas);
@@ -439,6 +445,7 @@ export class RaceView {
 
   // ---------- bucle ----------
   private radio: TeamRadio;
+  private pnotes: PaceNoteHud;
   private brakeFilter = new BrakeFilter();
   /** Estado para los comentarios de la radio. */
   private rs = { pos: 0, posT: 0, off: 0, drift: 0, hopSaid: false, lastSaid: false, leadSaid: false };
@@ -582,6 +589,10 @@ export class RaceView {
     const alpha = this.acc / STEP;
     this.visualTime += dt;
     this.radioWatch(dt);
+    {
+      const pp = this.player;
+      this.pnotes.update(pp ? pp.kart.proj.s : 0, pp ? Math.abs(pp.kart.vF) : 0, !!pp && !pp.finished && this.sim.phase === 'racing' && this.rig.mode !== 'tv');
+    }
     if (this.tutorial) {
       const pv = this.views.find((v) => v.comp === player);
       if (pv?.events.includes('hop')) this.tutorial.hop();
@@ -900,6 +911,7 @@ export class RaceView {
     this.replayT = 0;
     this.tv?.reset();
     this.hud.show(false);
+    this.pnotes.show(false);
     this.ctx.touch?.show(false);
     this.ctx.audio.silenceLoops();
     this.endPrompt.classList.add('hidden');
@@ -940,6 +952,7 @@ export class RaceView {
     this.rotateEl?.remove();
     this.replayEl = null;
     this.hud.show(true);
+    this.pnotes.show(true);
     this.ctx.touch?.show(this.ctx.touchEnabled());
     this.rig.reset();
     this.finishedAt = this.visualTime - 3;
@@ -1216,6 +1229,7 @@ export class RaceView {
     });
     this.hud.dispose();
     this.radio.dispose();
+    this.pnotes.dispose();
     this.pauseEl.remove();
     this.tutorial?.dispose();
     this.replayEl?.remove();

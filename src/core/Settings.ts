@@ -74,6 +74,8 @@ export interface Settings {
   vibration: boolean;
   /** Radio del equipo (comentarios de papá durante la carrera). */
   radio: boolean;
+  /** Notas de copiloto: apagadas, en pantalla o en pantalla y con voz. */
+  pacenotes: 'off' | 'visual' | 'voz';
 }
 
 export interface Profile {
@@ -115,6 +117,7 @@ export function defaultSettings(): Settings {
     ghost: true,
     vibration: true,
     radio: true,
+    pacenotes: 'visual',
   };
 }
 

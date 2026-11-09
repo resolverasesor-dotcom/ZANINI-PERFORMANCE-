@@ -34,11 +34,47 @@ function noiseFill(ctx: CanvasRenderingContext2D, w: number, h: number, base: [n
   ctx.putImageData(img, 0, 0);
 }
 
+/**
+ * Relleno "pintado": manchas suaves de baja frecuencia (enlosables) y un grano muy fino.
+ * Da superficies limpias y estilizadas en lugar de ruido de alta frecuencia.
+ */
+function paintFill(ctx: CanvasRenderingContext2D, w: number, h: number, base: [number, number, number], blotch: number, grain: number, seed: number, cells = 12): void {
+  const r = rng(seed);
+  const n = cells;
+  const [sc, sx] = canvas(n + 2, n + 2);
+  const grid: number[] = [];
+  for (let i = 0; i < n * n; i++) grid.push((r() - 0.5) * blotch);
+  const img = sx.createImageData(n + 2, n + 2);
+  for (let y = 0; y < n + 2; y++)
+    for (let x = 0; x < n + 2; x++) {
+      const v = grid[((y - 1 + n) % n) * n + ((x - 1 + n) % n)];
+      const o = (y * (n + 2) + x) * 4;
+      img.data[o] = base[0] + v;
+      img.data[o + 1] = base[1] + v;
+      img.data[o + 2] = base[2] + v * 0.9;
+      img.data[o + 3] = 255;
+    }
+  sx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(sc, -w / n, -h / n, (w * (n + 2)) / n, (h * (n + 2)) / n);
+  if (grain > 0) {
+    const d = ctx.getImageData(0, 0, w, h);
+    for (let i = 0; i < w * h; i++) {
+      const g = (r() - 0.5) * grain;
+      d.data[i * 4] += g;
+      d.data[i * 4 + 1] += g;
+      d.data[i * 4 + 2] += g;
+    }
+    ctx.putImageData(d, 0, 0);
+  }
+}
+
 export function asphaltTex(dark = false): THREE.Texture {
   const key = 'asphalt' + dark;
   if (cache.has(key)) return cache.get(key)!;
   const [c, ctx] = canvas(256, 256);
-  noiseFill(ctx, 256, 256, dark ? [46, 48, 54] : [78, 80, 86], 26, 11, 2);
+  paintFill(ctx, 256, 256, dark ? [54, 56, 66] : [92, 95, 105], 10, 9, 11);
   // Marcas de neumático sutiles
   ctx.globalAlpha = 0.06;
   ctx.fillStyle = '#000';
@@ -51,9 +87,9 @@ export function grassTex(): THREE.Texture {
   const key = 'grass';
   if (cache.has(key)) return cache.get(key)!;
   const [c, ctx] = canvas(256, 256);
-  noiseFill(ctx, 256, 256, [78, 140, 58], 30, 21, 1);
+  paintFill(ctx, 256, 256, [84, 158, 62], 14, 6, 21);
   // Franjas de césped cortado
-  ctx.globalAlpha = 0.08;
+  ctx.globalAlpha = 0.13;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, 128, 256);
   ctx.globalAlpha = 1;
@@ -74,7 +110,7 @@ export function groundTex(theme: string): THREE.Texture {
     quarry: [176, 140, 96],
     sunset: [150, 140, 100],
   };
-  noiseFill(ctx, 256, 256, base[theme] ?? [86, 146, 62], theme === 'night' ? 14 : 34, 31, 2);
+  paintFill(ctx, 256, 256, base[theme] ?? [86, 146, 62], theme === 'night' ? 8 : 18, theme === 'night' ? 4 : 7, 31, 8);
   return finish(key, c);
 }
 
@@ -82,7 +118,7 @@ export function gravelTex(): THREE.Texture {
   const key = 'gravel';
   if (cache.has(key)) return cache.get(key)!;
   const [c, ctx] = canvas(256, 256);
-  noiseFill(ctx, 256, 256, [186, 170, 142], 60, 41, 6);
+  paintFill(ctx, 256, 256, [188, 172, 144], 16, 30, 41);
   return finish(key, c);
 }
 
@@ -90,7 +126,7 @@ export function sandTex(): THREE.Texture {
   const key = 'sand';
   if (cache.has(key)) return cache.get(key)!;
   const [c, ctx] = canvas(256, 256);
-  noiseFill(ctx, 256, 256, [226, 204, 150], 26, 51, 1);
+  paintFill(ctx, 256, 256, [228, 206, 152], 14, 10, 51);
   return finish(key, c);
 }
 

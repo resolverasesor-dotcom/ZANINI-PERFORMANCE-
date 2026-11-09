@@ -47,7 +47,11 @@ const GradeShader = {
       }
       // Contraste y saturación
       col = (col - 0.5) * uContrast + 0.5;
+      // Curva en S suave (negros con cuerpo, luces limpias) y virado: sombras frías, luces cálidas
+      col = clamp(col, 0.0, 1.0);
+      col = mix(col, col * col * (3.0 - 2.0 * col), 0.1);
       float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col *= mix(vec3(0.975, 0.995, 1.035), vec3(1.02, 1.005, 0.975), smoothstep(0.15, 0.85, l));
       col = mix(vec3(l), col, uSat) * uTint;
       // Viñeta
       col *= 1.0 - uVignette * smoothstep(0.35, 0.85, r);
