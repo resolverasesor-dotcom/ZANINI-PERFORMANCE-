@@ -2,7 +2,24 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle } from '../core/math';
 import type { CameraMode } from '../core/Settings';
 
-/** Cámara de persecución con FOV dinámico, retardo de giro y vibración. */
+/** Dinámica del kart que la cámara "siente" (m/s²; ay > 0 = hacia la izquierda). */
+export interface CamDynamics {
+  ax: number;
+  ay: number;
+  /** Aspereza del suelo 0…1 (pianos, hierba, grava). */
+  rough: number;
+}
+
+const NO_DYN: CamDynamics = { ax: 0, ay: 0, rough: 0 };
+
+/**
+ * Cámara de persecución cinematográfica:
+ * - muelle con inercia: se queda atrás al acelerar y se acerca al frenar;
+ * - se abre hacia fuera en las curvas y se inclina con la fuerza lateral;
+ * - baja y se acerca con la velocidad, el FOV se abre (sensación de velocidad);
+ * - vibración de alta frecuencia que crece con la velocidad y en pianos/hierba;
+ * - modo TV (cámaras a pie de pista) y barrido de parrilla antes de la salida.
+ */
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   mode: CameraMode = 'trasera';
@@ -12,6 +29,12 @@ export class CameraRig {
   private shake = 0;
   private fov = 70;
   private first = true;
+  /** Estado suavizado de la dinámica (la cámara tiene "masa"). */
+  private sAx = 0;
+  private sAy = 0;
+  private roll = 0;
+  private t = 0;
+  private punch = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(70, aspect, 0.1, 2400);
@@ -19,34 +42,48 @@ export class CameraRig {
 
   reset(): void {
     this.first = true;
+    this.sAx = this.sAy = this.roll = 0;
   }
 
   addShake(a: number): void {
     this.shake = Math.min(1.2, this.shake + a);
   }
 
+  /** Golpe de FOV (saltito, rebufo, salida): la imagen "empuja" un instante. */
+  fovPunch(a: number): void {
+    this.punch = Math.min(8, this.punch + a);
+  }
+
   /**
    * Sigue al objetivo. yaw = rumbo del kart, velYaw = rumbo de la velocidad
    * (al deslizar la cámara se queda entre ambos y se aprecia el ángulo).
    */
-  follow(dt: number, x: number, y: number, z: number, yaw: number, velYaw: number, speedRatio: number, boost: boolean, slope: number): void {
+  follow(dt: number, x: number, y: number, z: number, yaw: number, velYaw: number, speedRatio: number, boost: boolean, slope: number, dyn: CamDynamics = NO_DYN): void {
     const cam = this.camera;
-    const target = this.mode === 'capo' ? yaw : velYaw + clampAngle(yaw - velYaw, 0.35) * 0.6;
-    if (this.first) {
-      this.yaw = target;
-    } else this.yaw = dampAngle(this.yaw, target, this.mode === 'capo' ? 30 : 7, dt);
+    this.t += dt;
+    const onboard = this.mode === 'capo';
+    // Dinámica con inercia (muelle crítico): suaviza y retrasa como un brazo de grúa
+    this.sAx = damp(this.sAx, clamp(dyn.ax, -16, 8), 3.2, dt);
+    this.sAy = damp(this.sAy, clamp(dyn.ay, -20, 20), 3.6, dt);
+    const sr = clamp(speedRatio, 0, 1.3);
+    const target = onboard ? yaw : velYaw + clampAngle(yaw - velYaw, 0.35) * 0.6;
+    if (this.first) this.yaw = target;
+    else this.yaw = dampAngle(this.yaw, target, onboard ? 30 : 6.5, dt);
     const fx = Math.sin(this.yaw);
     const fz = Math.cos(this.yaw);
+    // izquierda del rumbo de la cámara
+    const lx = Math.cos(this.yaw);
+    const lz = -Math.sin(this.yaw);
     let dist: number;
     let height: number;
     let lookAhead: number;
     let lookH: number;
     switch (this.mode) {
       case 'cercana':
-        dist = 3.3 + speedRatio * 0.5;
-        height = 1.45;
+        dist = 3.2 + sr * 0.35;
+        height = 1.35 - sr * 0.15;
         lookAhead = 4;
-        lookH = 0.75;
+        lookH = 0.7;
         break;
       case 'capo':
         dist = -0.15;
@@ -55,30 +92,43 @@ export class CameraRig {
         lookH = 0.9;
         break;
       default:
-        dist = 5.0 + speedRatio * 0.9;
-        height = 2.05 + speedRatio * 0.1;
-        lookAhead = 4.5;
-        lookH = 0.9;
+        // Más baja y algo más cerca con la velocidad: el suelo pasa más rápido
+        dist = 4.5 + sr * 0.2;
+        height = 1.9 - sr * 0.3;
+        lookAhead = 4.8 + sr * 1.5;
+        lookH = 0.85;
+    }
+    if (!onboard) {
+      // Acelerar: la cámara se queda atrás; frenar: se echa encima y mira algo más abajo
+      dist += clamp(this.sAx * 0.05, -0.55, 0.35);
+      lookH -= clamp(-this.sAx * 0.012, 0, 0.18);
     }
     // En vertical (móvil) alejamos y subimos la cámara para ver más pista
     const narrow = Math.max(0, 1 - cam.aspect);
-    if (this.mode !== 'capo') {
+    if (!onboard) {
       dist *= 1 + narrow * 0.55;
       height += narrow * 1.6;
     }
-    const tx = x - fx * dist;
-    const tz = z - fz * dist;
+    // En curva la cámara se abre hacia fuera (ay > 0 = curva a izquierdas → fuera es la derecha)
+    const side = onboard ? 0 : clamp(-this.sAy * 0.03, -0.6, 0.6);
+    const tx = x - fx * dist + lx * side;
+    const tz = z - fz * dist + lz * side;
     const ty = y + height - slope * dist * 0.5;
-    if (this.first || this.mode === 'capo') {
+    if (this.first || onboard) {
       this.pos.set(tx, ty, tz);
       this.first = false;
     } else {
-      this.pos.x = damp(this.pos.x, tx, 14, dt);
-      this.pos.z = damp(this.pos.z, tz, 14, dt);
+      this.pos.x = damp(this.pos.x, tx, 12, dt);
+      this.pos.z = damp(this.pos.z, tz, 12, dt);
       this.pos.y = damp(this.pos.y, ty, 6, dt);
     }
-    this.look.set(x + fx * lookAhead, y + lookH + slope * lookAhead * 0.5, z + fz * lookAhead);
+    this.look.set(x + fx * lookAhead - lx * side * 0.4, y + lookH + slope * lookAhead * 0.5, z + fz * lookAhead - lz * side * 0.4);
     cam.position.copy(this.pos);
+    // Vibración: golpes (aleatorio que se apaga) + zumbido continuo de la velocidad y del suelo
+    const buzz = (0.006 + 0.02 * dyn.rough) * sr * sr + 0.03 * dyn.rough;
+    const hf = Math.sin(this.t * 61) * 0.6 + Math.sin(this.t * 97 + 1.3) * 0.4;
+    cam.position.y += hf * buzz;
+    cam.position.x += Math.sin(this.t * 73 + 0.7) * buzz * 0.5;
     if (this.shake > 0.001) {
       const s = this.shake * 0.12;
       cam.position.x += (Math.random() - 0.5) * s;
@@ -87,12 +137,49 @@ export class CameraRig {
       this.shake = damp(this.shake, 0, 6, dt);
     }
     cam.lookAt(this.look);
-    const baseFov = this.mode === 'capo' ? 74 : 66;
+    // Inclinación con la fuerza lateral (como la cabeza del piloto): ~2° por g, más a bordo
+    const rollTarget = clamp(this.sAy / 9.81, -1.7, 1.7) * (onboard ? 0.06 : 0.032);
+    this.roll = damp(this.roll, rollTarget, 5, dt);
+    cam.rotateZ(this.roll);
+    // FOV: se abre con la velocidad (curva progresiva) y con la aceleración
+    const baseFov = onboard ? 72 : 62;
     const narrowF = Math.max(0, 1 - cam.aspect);
-    const targetFov = baseFov + narrowF * 26 + clamp(speedRatio, 0, 1.3) * 16 + (boost ? 8 : 0);
-    this.fov = damp(this.fov, targetFov, 4, dt);
+    this.punch = damp(this.punch, 0, 3, dt);
+    const targetFov = baseFov + narrowF * 26 + Math.pow(Math.min(1.2, sr), 1.6) * 14 + clamp(this.sAx, 0, 6) * 0.5 + this.punch + (boost ? 8 : 0);
+    this.fov = damp(this.fov, targetFov, 3.5, dt);
     cam.fov = this.fov;
     cam.updateProjectionMatrix();
+  }
+
+  /**
+   * Barrido cinematográfico de la parrilla (antes del semáforo): grúa que baja desde
+   * delante de la parrilla y termina detrás del kart, donde empieza la persecución.
+   * u = 0…1 del recorrido; from/to en coordenadas del mundo.
+   */
+  crane(u: number, gridCenter: THREE.Vector3, gridYaw: number, kart: THREE.Vector3, kartYaw: number): void {
+    const cam = this.camera;
+    const e = u * u * (3 - 2 * u);
+    const fx = Math.sin(gridYaw);
+    const fz = Math.cos(gridYaw);
+    // Inicio: alto, delante de la parrilla y a un lado, mirando hacia ella
+    const a = new THREE.Vector3(gridCenter.x + fx * 16 + fz * 9, gridCenter.y + 9, gridCenter.z + fz * 16 - fx * 9);
+    // Final: posición de persecución detrás del kart del jugador
+    const kx = Math.sin(kartYaw);
+    const kz = Math.cos(kartYaw);
+    const b = new THREE.Vector3(kart.x - kx * 4.9, kart.y + 1.95, kart.z - kz * 4.9);
+    // Curva: pasa por un lateral bajo (efecto travelling)
+    const mid = new THREE.Vector3((a.x + b.x) / 2 - fz * 8, Math.max(a.y, b.y) * 0.5 + 1.2, (a.z + b.z) / 2 + fx * 8);
+    const p = a.clone().multiplyScalar((1 - e) * (1 - e)).addScaledVector(mid, 2 * e * (1 - e)).addScaledVector(b, e * e);
+    cam.position.copy(p);
+    const look = gridCenter.clone().lerp(new THREE.Vector3(kart.x + kx * 4.8, kart.y + 0.85, kart.z + kz * 4.8), e);
+    cam.lookAt(look);
+    cam.fov = 50 + e * 12;
+    this.fov = cam.fov;
+    cam.updateProjectionMatrix();
+    // Al terminar, la persecución arranca desde aquí sin salto
+    this.pos.copy(p);
+    this.yaw = kartYaw;
+    this.first = false;
   }
 
   /** Cámara libre (orbital) para ceremonias y repeticiones. */

@@ -4,7 +4,7 @@ import { load, save } from './Storage';
 import type { HelmetStyle, LiveryStyle } from '../engine/livery';
 
 export type Quality = 'bajo' | 'medio' | 'alto';
-export type CameraMode = 'trasera' | 'cercana' | 'capo';
+export type CameraMode = 'trasera' | 'cercana' | 'capo' | 'tv';
 export type SpeedClass = '50' | '100' | '150';
 export type AssistLevel = 'ninguna' | 'media' | 'maxima';
 

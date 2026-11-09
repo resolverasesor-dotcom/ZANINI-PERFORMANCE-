@@ -2,6 +2,8 @@
 // ingeniero en pista: aceleración, punta, inercia al soltar, frenada, agarre
 // lateral máximo, respuesta a un golpe de volante, frenar girando y saltitos.
 import { Track } from '../src/track/Track';
+import { BrakeFilter } from '../src/core/brakeFilter';
+import { filterSteer } from '../src/core/steerFilter';
 import type { TrackDef } from '../src/track/TrackData';
 import { emptyInput, Kart, KART, ALPHA_PEAK, setKartClass, steadySteer, type KartInput } from '../src/physics/Kart';
 
@@ -144,5 +146,23 @@ for (const [vt, st] of [[8, 0.6], [14, 0.25], [22, 0.08]] as const) {
   run(k, 2.5, (_, i) => { i.steer = st; i.throttle = k.vF < vt ? 0.8 : 0; });
   const inner = k.lift[3] > k.lift[2] ? 3 : 2;
   log(`Curva a ${kmh(k.vF)} km/h (volante ${st * 100} %, ${(k.ay / 9.81).toFixed(2)} g): carga ruedas ${k.load.map((x) => x.toFixed(0)).join('/')} N · trasera interior ${k.lift[inner] > 0.002 ? `levantada ${(k.lift[inner] * 100).toFixed(1)} cm` : 'apoyada'}`);
+}
+// 11. Frenar a fondo con el botón mientras se gira (el fallo de "se queda recto"):
+// sin filtro las ruedas se bloquean y el kart no gira; con el pie del piloto (filtro) sí
+for (const filt of [false, true]) {
+  const k = fresh();
+  const bf = new BrakeFilter();
+  run(k, 20, (_, i) => (i.throttle = k.vF < 20 ? 1 : 0));
+  let ay = 0;
+  let stop = 0;
+  run(k, 2.5, (t, i) => {
+    i.steer = filterSteer(0.6, k.vF, true, k.vL);
+    i.brake = bf.update(1, i.steer, k, dt, filt);
+    if (k.vF > 0.5) {
+      ay = Math.max(ay, Math.abs(k.ay));
+      stop += k.vF * dt;
+    }
+  });
+  log(`Freno a fondo (botón) girando al 60 % desde 72 km/h, ${filt ? 'CON pie del piloto' : 'sin filtro'}: ${(ay / 9.81).toFixed(2)} g de giro · ${stop.toFixed(1)} m${filt && ay / 9.81 < 0.8 ? ' · ERROR: no gira al frenar' : ''}`);
 }
 log(`(pico de agarre del neumático a ${(ALPHA_PEAK * 57.3).toFixed(1)}° de deriva)`);

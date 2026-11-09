@@ -30,6 +30,17 @@ function colored(geo: THREE.BufferGeometry, color: THREE.ColorRepresentation, m:
 const M = (x: number, y: number, z: number, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1): THREE.Matrix4 =>
   new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
 
+/** Tubo entre dos puntos (chasis, brazos, escape). */
+function tubeAB(a: [number, number, number], b: [number, number, number], r: number, col: THREE.ColorRepresentation, seg = 7): THREE.BufferGeometry {
+  const A = new THREE.Vector3(...a);
+  const B = new THREE.Vector3(...b);
+  const d = B.clone().sub(A);
+  const len = d.length();
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  const m = new THREE.Matrix4().compose(A.clone().add(B).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1));
+  return colored(new THREE.CylinderGeometry(r, r, len, seg), col, m);
+}
+
 function darker(hex: string, k: number): THREE.Color {
   return new THREE.Color(hex).multiplyScalar(k);
 }
@@ -117,10 +128,18 @@ export function buildKartBody(color: string, suit: string, livery: LiveryStyle, 
   // Piloto: torso, piernas, brazos y guantes
   parts.push(colored(box(0.42, 0.46, 0.28), suit, M(0, 0.66, -0.24, -0.25)));
   parts.push(colored(box(0.36, 0.16, 0.62), suit, M(0, 0.32, 0.2)));
+  const glove = livery === 'ale' ? accent : '#222';
   for (const s of [-1, 1]) {
-    parts.push(colored(box(0.1, 0.1, 0.42), suit, M(s * 0.2, 0.68, 0.0, 0.35, 0, 0)));
-    parts.push(colored(box(0.11, 0.11, 0.1), livery === 'ale' ? accent : '#222', M(s * 0.16, 0.62, 0.2)));
+    // Brazo y antebrazo hasta las manetas del volante; guante en la maneta
+    parts.push(tubeAB([s * 0.21, 0.82, -0.2], [s * 0.25, 0.64, 0.02], 0.055, suit));
+    parts.push(tubeAB([s * 0.25, 0.64, 0.02], [s * 0.15, 0.68, 0.22], 0.048, suit));
+    parts.push(colored(new THREE.SphereGeometry(0.055, 8, 6), glove, M(s * 0.14, 0.68, 0.24)));
+    // Botas en los pedales
+    parts.push(colored(box(0.1, 0.12, 0.18), '#1a1a1e', M(s * 0.12, 0.28, 0.56, 0.6)));
   }
+  // Franja del mono y protector de costillas
+  parts.push(colored(box(0.43, 0.06, 0.29), livery === 'ale' ? accent : darker(suit, 1.6), M(0, 0.74, -0.23, -0.25)));
+  parts.push(colored(box(0.46, 0.1, 0.3), '#202024', M(0, 0.5, -0.26, -0.25)));
   // Visera y cuello (el casco va aparte, con textura)
   parts.push(colored(box(0.26, 0.08, 0.1), '#0d1a26', M(0, 1.01, 0.04)));
   parts.push(colored(new THREE.CylinderGeometry(0.1, 0.12, 0.1, 8), carbon, M(0, 0.86, -0.16)));
@@ -130,6 +149,47 @@ export function buildKartBody(color: string, suit: string, livery: LiveryStyle, 
   parts.push(colored(box(0.36, 0.08, 0.04), '#222', M(0, 0.33, -1.065)));
   // Ejes
   parts.push(colored(new THREE.CylinderGeometry(0.03, 0.03, 1.2, 5), '#555', M(0, 0.17, -0.62, 0, 0, Math.PI / 2)));
+
+  // --- Detalle mecánico común: bastidor de tubos, freno, transmisión, radiador ---
+  const steel = bodyStyle === 'retro' ? chrome : '#8f969f';
+  for (const s of [-1, 1]) {
+    parts.push(tubeAB([s * 0.3, 0.12, 0.78], [s * 0.36, 0.12, -0.82], 0.022, steel));
+    // barra lateral (nerf bar) entre ruedas
+    parts.push(tubeAB([s * 0.36, 0.13, 0.4], [s * 0.7, 0.14, 0.28], 0.018, steel));
+    parts.push(tubeAB([s * 0.7, 0.14, 0.28], [s * 0.7, 0.14, -0.3], 0.018, steel));
+    parts.push(tubeAB([s * 0.7, 0.14, -0.3], [s * 0.36, 0.13, -0.42], 0.018, steel));
+    // mangueta delantera
+    parts.push(tubeAB([s * 0.32, 0.13, 0.62], [s * 0.52, 0.15, 0.6], 0.02, steel));
+  }
+  parts.push(tubeAB([-0.3, 0.12, 0.7], [0.3, 0.12, 0.7], 0.02, steel));
+  parts.push(tubeAB([-0.36, 0.12, -0.45], [0.36, 0.12, -0.45], 0.02, steel));
+  // Disco de freno con pinza roja (eje trasero) y corona de la transmisión
+  parts.push(colored(new THREE.CylinderGeometry(0.1, 0.1, 0.012, 16), '#9a9ea6', M(-0.18, 0.17, -0.62, 0, 0, Math.PI / 2)));
+  parts.push(colored(box(0.05, 0.07, 0.09), '#d7261e', M(-0.18, 0.25, -0.6)));
+  parts.push(colored(new THREE.CylinderGeometry(0.085, 0.085, 0.015, 14), '#3b3e44', M(0.46, 0.17, -0.62, 0, 0, Math.PI / 2)));
+  if (bodyStyle !== 'retro') {
+    // Aletas del cilindro, carburador y caja de admisión
+    for (let i = 0; i < 4; i++) parts.push(colored(box(0.32, 0.015, 0.32), '#9aa0a8', M(0.34, 0.5 + i * 0.035, -0.58)));
+    parts.push(colored(new THREE.CylinderGeometry(0.07, 0.07, 0.24, 10), '#1e1f23', M(0.12, 0.45, -0.5, 0, 0, Math.PI / 2)));
+  }
+  if (bodyStyle === 'std' || bodyStyle === 'aero' || bodyStyle === 'ale') {
+    // Escape de expansión (la "panza" del dos tiempos) hacia atrás por la derecha
+    const curve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(0.42, 0.42, -0.42),
+      new THREE.Vector3(0.62, 0.44, -0.5),
+      new THREE.Vector3(0.66, 0.42, -0.75),
+      new THREE.Vector3(0.56, 0.4, -0.98),
+    ]);
+    parts.push(colored(new THREE.TubeGeometry(curve, 14, 0.065, 8), '#b9bec7', new THREE.Matrix4()));
+    parts.push(tubeAB([0.56, 0.4, -0.98], [0.5, 0.39, -1.1], 0.045, '#55585e'));
+  }
+  if (bodyStyle !== 'retro') {
+    // Radiador lateral (motor refrigerado por agua) a la izquierda del asiento
+    parts.push(colored(box(0.05, 0.36, 0.32), '#2a2c31', M(-0.5, 0.5, -0.2)));
+    parts.push(colored(box(0.055, 0.3, 0.26), '#5b6068', M(-0.505, 0.5, -0.2)));
+    // Panel frontal (nassau) delante de las piernas
+    parts.push(colored(box(0.5, 0.26, 0.04), color, M(0, 0.45, 0.5, -0.45)));
+  }
 
   if (livery === 'ale' && bodyStyle !== 'retro') {
     // Franjas de carreras sobre morro y pontones
@@ -152,9 +212,34 @@ function wheelGeo(rear: boolean, hubColor: string): THREE.BufferGeometry {
   if (hit) return hit;
   const r = rear ? 0.17 : 0.15;
   const w = rear ? 0.24 : 0.18;
-  const tyre = colored(new THREE.CylinderGeometry(r, r, w, 12), '#18181b', M(0, 0, 0, 0, 0, Math.PI / 2));
-  const hub = colored(new THREE.CylinderGeometry(r * 0.55, r * 0.55, w + 0.01, 6), hubColor, M(0, 0, 0, 0, 0, Math.PI / 2));
-  const g = mergeGeometries([tyre, hub])!;
+  // Neumático slick con hombros redondeados (perfil de revolución) y flanco más claro
+  const prof: THREE.Vector2[] = [];
+  const rimR = r * 0.6;
+  const sh = 0.03;
+  prof.push(new THREE.Vector2(rimR, -w / 2));
+  for (let i = 0; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    prof.push(new THREE.Vector2(r - sh + Math.sin(a) * sh, -w / 2 + sh - Math.cos(a) * sh));
+  }
+  for (let i = 0; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    prof.push(new THREE.Vector2(r - sh + Math.cos(a) * sh, w / 2 - sh + Math.sin(a) * sh));
+  }
+  prof.push(new THREE.Vector2(rimR, w / 2));
+  const tyre = colored(new THREE.LatheGeometry(prof, 18), '#17171a', M(0, 0, 0, 0, 0, Math.PI / 2));
+  const parts = [tyre];
+  for (const sx of [-1, 1]) {
+    // Flanco (franja algo más clara) y llanta con labio y 5 radios
+    parts.push(colored(new THREE.RingGeometry(r * 0.7, r * 0.86, 18), '#2c2c31', M(sx * (w / 2 + 0.002), 0, 0, 0, (sx * Math.PI) / 2, 0)));
+    parts.push(colored(new THREE.CylinderGeometry(rimR, rimR, 0.012, 16, 1, true), hubColor, M(sx * (w / 2 - 0.004), 0, 0, 0, 0, Math.PI / 2)));
+  }
+  parts.push(colored(new THREE.CylinderGeometry(rimR * 0.96, rimR * 0.96, w - 0.01, 16), darker(hubColor, 0.55), M(0, 0, 0, 0, 0, Math.PI / 2)));
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    parts.push(colored(new THREE.BoxGeometry(0.02, rimR * 0.95, 0.035), hubColor, M(w / 2 + 0.004, Math.cos(a) * rimR * 0.45, Math.sin(a) * rimR * 0.45, a, 0, 0)));
+  }
+  parts.push(colored(new THREE.CylinderGeometry(rimR * 0.28, rimR * 0.28, w + 0.03, 8), '#d9dde4', M(0, 0, 0, 0, 0, Math.PI / 2)));
+  const g = mergeGeometries(parts)!;
   g.userData.shared = true;
   wheelGeos.set(key, g);
   return g;

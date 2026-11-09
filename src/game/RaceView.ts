@@ -1,4 +1,5 @@
 import { filterSteer } from '../core/steerFilter';
+import { BrakeFilter } from '../core/brakeFilter';
 import { TeamRadio } from '../ui/TeamRadio';
 import * as THREE from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
@@ -181,6 +182,9 @@ class KartView {
   }
 }
 
+/** Duración del barrido de grúa sobre la parrilla (s de cuenta atrás). */
+const CRANE_TIME = 2.8;
+
 export class RaceView {
   readonly scene = new THREE.Scene();
   readonly sim: RaceSim;
@@ -253,6 +257,7 @@ export class RaceView {
     const quality = ctx.settings.quality;
     this.trackScene = new TrackScene(this.track, quality, this.scene);
     this.rig = new CameraRig(window.innerWidth / window.innerHeight);
+    this.trackScene.camera = this.rig.camera;
     this.rig.mode = ctx.settings.camera;
     this.effects = new Effects(quality === 'bajo');
     this.scene.add(this.effects.group);
@@ -364,7 +369,7 @@ export class RaceView {
         <button class="btn" data-act="restart">Reiniciar</button>
         <button class="btn" data-act="assist">Ayudas: <b>${ASSIST_LABELS[this.ctx.settings.assist]}</b></button>
         ${this.ctx.touchEnabled() ? `<button class="btn" data-act="autoaccel">Aceleración automática: <b>${this.ctx.settings.autoAccel ? 'Sí' : 'No'}</b></button>` : ''}
-        <button class="btn" data-act="camera">Cámara: <b>${{ trasera: 'Trasera', cercana: 'Cercana', capo: 'Capó' }[this.rig.mode]}</b></button>
+        <button class="btn" data-act="camera">Cámara: <b>${{ trasera: 'Trasera', cercana: 'Cercana', capo: 'Capó', tv: 'TV' }[this.rig.mode]}</b></button>
         <button class="btn danger" data-act="exit" >Salir al menú</button>
         <button class="hidden" data-back data-act="resume"></button>
         <div class="pause-help">Controles: ←→ girar · ↑ acelerar · ↓ frenar · Espacio saltito · R reaparecer · C cámara</div>
@@ -406,7 +411,7 @@ export class RaceView {
   }
 
   private cycleCamera(): void {
-    const order: CameraMode[] = ['trasera', 'cercana', 'capo'];
+    const order: CameraMode[] = ['trasera', 'cercana', 'capo', 'tv'];
     const next = order[(order.indexOf(this.rig.mode) + 1) % order.length];
     this.setCamera(next);
     this.ctx.settings.camera = next;
@@ -434,6 +439,7 @@ export class RaceView {
 
   // ---------- bucle ----------
   private radio: TeamRadio;
+  private brakeFilter = new BrakeFilter();
   /** Estado para los comentarios de la radio. */
   private rs = { pos: 0, posT: 0, off: 0, drift: 0, hopSaid: false, lastSaid: false, leadSaid: false };
 
@@ -526,7 +532,8 @@ export class RaceView {
     pi.steer = filterSteer(ctrl.steer, this.player?.kart.vF ?? 0, this.ctx.settings.steerFilter !== false, this.player?.kart.vL ?? 0);
     // Con aceleración automática no se acelera en parrilla (evita la salida anticipada)
     pi.throttle = this.ctx.input.autoAccelActive && this.sim.phase === 'countdown' && !this.ctx.input.touch.accel ? 0 : ctrl.throttle;
-    pi.brake = ctrl.brake;
+    // Pie del piloto: freno progresivo que no bloquea y cede al girar (capa de entrada)
+    pi.brake = this.player ? this.brakeFilter.update(ctrl.brake, pi.steer, this.player.kart, Math.min(dt, 0.1), this.ctx.settings.steerFilter !== false) : ctrl.brake;
     pi.hop = ctrl.hop;
     if (this.player && !this.player.ai && this.sim.phase !== 'countdown') this.applyAssists(pi, Math.min(dt, 0.1));
 
@@ -626,7 +633,20 @@ export class RaceView {
     const i0 = k.proj.idx;
     const slope = (this.track.py[(i0 + 3) % this.track.n] - this.track.py[i0]) / (3 * this.track.ds);
     const along = Math.sin(k.yaw) * k.proj.tx + Math.cos(k.yaw) * k.proj.tz;
-    this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along);
+    const offT = k.surface === 'grass' || k.surface === 'sand' || k.surface === 'gravel' ? Math.min(1, sp / 12) : 0;
+    const cd = this.sim.countdown;
+    if (this.setup.kind === 'race' && this.sim.phase === 'countdown' && cd < CRANE_TIME && !this.tutorial) {
+      // Barrido de grúa sobre la parrilla antes del semáforo
+      if (!this.gridCenter) {
+        this.gridCenter = new THREE.Vector3();
+        for (const w of this.views) this.gridCenter.add(w.mesh.root.position);
+        this.gridCenter.multiplyScalar(1 / this.views.length);
+      }
+      this.rig.crane(Math.min(1, cd / CRANE_TIME), this.gridCenter, this.track.headingAt(p.kart.proj.s), pos, v.mesh.root.rotation.y);
+    } else if (this.rig.mode === 'tv') {
+      if (!this.tv) this.tv = new TVDirector(this.track);
+      this.tv.frame(this.rig.camera, pos, k.proj.s, dt);
+    } else this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along, { ax: k.ax, ay: k.ay, rough: Math.max(k.kerb * 0.7, offT) });
     // Golpes: sacudida, destello rojo, vibración y, si es fuerte, micropausa
     const hit = Math.max(v.wallImpact, v.kartImpact * 1.2);
     if (hit > 0.7) {
@@ -665,6 +685,7 @@ export class RaceView {
   }
 
   private kerbBuzz = 0;
+  private gridCenter: THREE.Vector3 | null = null;
 
   /** Vibración del móvil (si hay controles táctiles y está activada). */
   private vibrate(ms: number): void {
@@ -773,6 +794,7 @@ export class RaceView {
         if (e === 'hop' && v.comp === this.player) {
           this.ctx.audio.hop();
           this.rig.addShake(0.06);
+          this.rig.fovPunch(2.5);
           this.ctx.input.rumble(0.25, 60);
         }
       }
@@ -949,6 +971,7 @@ export class RaceView {
         hud.setLights(0, true, true);
         this.trackScene.setStartLights(0);
         hud.message('¡YA!', 'go', 1.2);
+        this.rig.fovPunch(5);
         a.goBeep();
         a.cheer(0.8);
         setTimeout(() => hud.setLights(0, false), 900);
@@ -1107,8 +1130,10 @@ export class RaceView {
     hud.setGrip(k.drifting ? Math.abs(Math.atan2(k.vL, Math.max(2, k.vF))) : 0, k.bog > 0.18 && this.playerInput.throttle > 0.5 && k.hopCool <= 0 && k.speed > 4 && (k.surface === 'track' || k.surface === 'kerb') && k.wallScrape === 0);
     // En móvil (pantalla pequeña) los efectos de velocidad se suavizan a la mitad
     const fxK = this.ctx.touchEnabled() ? 0.5 : 1;
-    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? clamp((ratio - 0.82) / 0.3, 0, 1) * 0.45 * fxK : 0);
-    const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.72) / 0.35, 0, 1) : 0);
+    // Progresivo desde media velocidad (un kart a 70 km/h a ras de suelo ya "vuela")
+    const sp01 = clamp((ratio - 0.55) / 0.45, 0, 1);
+    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? sp01 * sp01 * 0.6 * fxK : 0);
+    const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.62) / 0.38, 0, 1) : 0);
     hud.drawSpeedLines(Math.min(1, sl), false);
 
     // Dirección contraria

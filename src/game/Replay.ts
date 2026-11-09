@@ -92,7 +92,8 @@ export class TVDirector {
       const lim = t.hw[i] + (side > 0 ? t.runR[i] : t.runL[i]);
       const p = { x: 0, y: 0, z: 0 };
       t.pointAt(s, side * (lim + 6), p);
-      this.spots.push({ s, x: p.x, y: p.y + 4 + ((s / 55) % 3) * 1.5, z: p.z });
+      // Altas, como las grúas de TV: miran por encima de vallas y barreras
+      this.spots.push({ s, x: p.x, y: p.y + 7.5 + ((s / 55) % 3) * 1.5, z: p.z });
       side = -side;
     }
   }

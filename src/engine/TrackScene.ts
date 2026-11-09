@@ -6,6 +6,7 @@ import type { DecorType, ThemeId } from '../track/TrackData';
 import { makeProto } from './decor';
 import { adTex, ADS } from './ads';
 import { crowdMaterial, flagMaterial, Gulls, seaMaterial } from './ambient';
+import { TrackLife } from './trackLife';
 import { buildLandmark } from './landmarks';
 import { buildKartVenue, buildTyreBarrier, type VenueParts } from './kartVenue';
 import { Lensflare, LensflareElement } from 'three/examples/jsm/objects/Lensflare.js';
@@ -138,6 +139,8 @@ export class TrackScene {
     this.buildLandmarks();
     this.buildFlags();
     this.buildDetails();
+    this.life = new TrackLife(track, this.groundY, def.theme, quality, !!this.gulls);
+    this.group.add(this.life.group);
     this.buildSkyLife(scene);
   }
 
@@ -390,6 +393,9 @@ export class TrackScene {
 
   private foam: { mesh: THREE.Mesh; base: number; axis: 'x' | 'z'; dir: number } | null = null;
   private gulls: Gulls | null = null;
+  private life: TrackLife | null = null;
+  /** Cámara activa (para las motas del aire). */
+  camera: THREE.Camera | null = null;
   readonly time = { value: 0 };
   private landmarkUpdates: ((t: number) => void)[] = [];
 
@@ -1102,6 +1108,7 @@ export class TrackScene {
       (f.mesh.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.3 * (0.5 + 0.5 * Math.sin(t * 0.9 + 1.2));
     }
     this.gulls?.update(t);
+    this.life?.update(t, dt, focus, this.camera);
     if (this.clouds) this.clouds.rotation.y = t * 0.002;
     for (const u of this.landmarkUpdates) u(t);
   }
@@ -1112,6 +1119,7 @@ export class TrackScene {
       if (o instanceof THREE.InstancedMesh) o.dispose();
     });
     this.lensflare?.dispose();
+    this.life?.dispose();
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
   }

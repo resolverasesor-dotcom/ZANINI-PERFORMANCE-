@@ -56,6 +56,30 @@ lo que cambia es cómo se conducen.
 
 Los rivales también llevan modelos distintos, así que en pista se ven karts diferentes.
 
+## Cámara y sensación de velocidad
+
+- **Persecución con inercia**: la cámara se queda atrás al acelerar y se echa encima al frenar, se abre
+  hacia fuera en las curvas y se **inclina con la fuerza lateral** (~2° por g; más en la vista de capó).
+- Con la velocidad baja y se acerca, el **FOV se abre** de forma progresiva y hay una vibración fina que
+  crece con la velocidad y en pianos, hierba o grava. Golpe de FOV en la salida y en cada saltito.
+- **Barrido de grúa** sobre la parrilla antes del semáforo, que termina detrás de tu kart.
+- **Cámara TV** (C o *Ajustes → Cámara*): cámaras de realización elevadas a pie de pista con teleobjetivo.
+- Desenfoque radial y líneas de velocidad desde media velocidad (suavizados en móvil).
+
+## Vida en el circuito
+
+Carteles de frenada **150 / 100 / 50** antes de cada curva fuerte, **torres de TV** con un cámara que
+gira siguiendo tu kart, **fotógrafos** agachados en las horquillas que disparan el flash al pasar,
+**polen y polvo** en el aire (luciérnagas de noche), un **dirigible ZANINI** dando vueltas y bandadas de
+pájaros. Todo en `src/engine/trackLife.ts`.
+
+## Karts con más detalle
+
+Bastidor de tubos y barras laterales visibles, disco de freno con pinza roja, corona de transmisión,
+aletas del cilindro y caja de admisión, **escape de expansión** del dos tiempos, radiador lateral, panel
+frontal, piloto con brazos hasta el volante, guantes, botas y protector de costillas, y **neumáticos con
+hombros redondeados, flanco y llantas de 5 radios**.
+
 ## Radio del equipo
 
 Durante la carrera, **papá habla por la radio** desde el muro: salida, adelantamientos (ganados y
@@ -89,6 +113,11 @@ Consejos para ir rápido:
 - **El derrape no es un botón**: sale solo cuando superas el agarre, por ejemplo al entrar pasado o al
   frenar girando (la zaga se descarga y se suelta). Un poco de deslizamiento es rápido; mucho, lento.
   El marcador muestra el ángulo: verde (bien), amarillo, rojo (te estás pasando). Contravolantea.
+- **Freno con pie de piloto** (filtro de entrada, junto al de dirección): con teclado o botón táctil el
+  freno no entra de golpe al 100 %, sube progresivamente, afloja si una rueda se bloquea y **cede al
+  girar** (*trail braking*). Antes, frenar a fondo bloqueaba las ruedas y el kart se iba recto aunque
+  giraras; ahora gira (≈1,3 g frenando con el volante al 60 % frente a 0,6 g sin filtro). Se quita con
+  la dirección progresiva en *Ajustes → Controles*.
 - **Saltito** (Espacio / RB / botón SALTITO): como hacen los pilotos de verdad, te levantas un instante del
   asiento para descargar peso. El eje trasero rígido deja de "clavarse" en las curvas lentas y el kart sale
   con más fuerza. Úsalo acelerando a la salida de las horquillas; cuando el eje está clavado, el
