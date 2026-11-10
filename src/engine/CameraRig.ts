@@ -6,11 +6,14 @@ import type { CameraMode } from '../core/Settings';
 export interface CamDynamics {
   ax: number;
   ay: number;
-  /** Aspereza del suelo 0…1 (pianos, hierba, grava). */
-  rough: number;
+  /** Ruedas sobre el piano 0…1 y fuera de pista 0…1 (hierba, grava, arena). */
+  kerb: number;
+  off: number;
+  /** Velocidad (m/s): marca el ritmo de los resaltes del piano. */
+  speed: number;
 }
 
-const NO_DYN: CamDynamics = { ax: 0, ay: 0, rough: 0 };
+const NO_DYN: CamDynamics = { ax: 0, ay: 0, kerb: 0, off: 0, speed: 0 };
 
 /**
  * Cámara de persecución cinematográfica:
@@ -35,6 +38,8 @@ export class CameraRig {
   private roll = 0;
   private t = 0;
   private punch = 0;
+  private kerbPh = 0;
+  private jolt = 0;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(70, aspect, 0.1, 2400);
@@ -51,7 +56,7 @@ export class CameraRig {
 
   /** Golpe de FOV (saltito, rebufo, salida): la imagen "empuja" un instante. */
   fovPunch(a: number): void {
-    this.punch = Math.min(8, this.punch + a);
+    this.punch = Math.max(-8, Math.min(8, this.punch + a));
   }
 
   /**
@@ -124,11 +129,22 @@ export class CameraRig {
     }
     this.look.set(x + fx * lookAhead - lx * side * 0.4, y + lookH + slope * lookAhead * 0.5, z + fz * lookAhead - lz * side * 0.4);
     cam.position.copy(this.pos);
-    // Vibración: golpes (aleatorio que se apaga) + zumbido continuo de la velocidad y del suelo
-    const buzz = (0.006 + 0.02 * dyn.rough) * sr * sr + 0.03 * dyn.rough;
-    const hf = Math.sin(this.t * 61) * 0.6 + Math.sin(this.t * 97 + 1.3) * 0.4;
-    cam.position.y += hf * buzz;
-    cam.position.x += Math.sin(this.t * 73 + 0.7) * buzz * 0.5;
+    // Sin zumbido de fondo: en asfalto la imagen va limpia, así cada superficie se nota.
+    // Piano: traqueteo rítmico, un golpe por resalte (más rápido cuanto más corres)
+    if (dyn.kerb > 0.01) {
+      this.kerbPh += dt * Math.min(34, Math.max(9, dyn.speed / 0.55)) * Math.PI * 2;
+      const tooth = Math.sin(this.kerbPh) > 0 ? 1 : -1;
+      const a = (onboard ? 0.03 : 0.045) * Math.min(1, dyn.kerb * 1.5) * Math.min(1, 0.4 + dyn.speed / 20);
+      cam.position.y += tooth * a;
+      this.jolt = tooth * a * 0.22;
+    } else if (dyn.off > 0.01) {
+      // Fuera de pista: botes irregulares y graves, la cámara cabecea y se ladea
+      const b = Math.sin(this.t * 23) * 0.5 + Math.sin(this.t * 37 + 1.1) * 0.3 + Math.sin(this.t * 11 + 2.3) * 0.4;
+      const a = (onboard ? 0.05 : 0.075) * dyn.off;
+      cam.position.y += b * a;
+      cam.position.x += Math.sin(this.t * 17 + 0.5) * a * 0.5;
+      this.jolt = Math.sin(this.t * 13 + 0.9) * dyn.off * 0.018;
+    } else this.jolt = 0;
     if (this.shake > 0.001) {
       const s = this.shake * 0.12;
       cam.position.x += (Math.random() - 0.5) * s;
@@ -140,7 +156,7 @@ export class CameraRig {
     // Inclinación con la fuerza lateral (como la cabeza del piloto): ~2° por g, más a bordo
     const rollTarget = clamp(this.sAy / 9.81, -1.7, 1.7) * (onboard ? 0.06 : 0.032);
     this.roll = damp(this.roll, rollTarget, 5, dt);
-    cam.rotateZ(this.roll);
+    cam.rotateZ(this.roll + this.jolt);
     // FOV: se abre con la velocidad (curva progresiva) y con la aceleración
     const baseFov = onboard ? 72 : 62;
     const narrowF = Math.max(0, 1 - cam.aspect);

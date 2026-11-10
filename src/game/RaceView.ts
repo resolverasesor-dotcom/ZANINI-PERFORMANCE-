@@ -646,22 +646,22 @@ export class RaceView {
     } else if (this.rig.mode === 'tv') {
       if (!this.tv) this.tv = new TVDirector(this.track);
       this.tv.frame(this.rig.camera, pos, k.proj.s, dt);
-    } else this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along, { ax: k.ax, ay: k.ay, rough: Math.max(k.kerb * 0.7, offT) });
+    } else this.rig.follow(dt, pos.x, pos.y, pos.z, v.mesh.root.rotation.y, velYaw, sp / KART.vmax, false, slope * along, { ax: k.ax, ay: k.ay, kerb: sp > 3 ? k.kerb : 0, off: offT, speed: sp });
     // Golpes: sacudida, destello rojo, vibración y, si es fuerte, micropausa
     const hit = Math.max(v.wallImpact, v.kartImpact * 1.2);
     if (hit > 0.7) {
       const s = Math.min(1, hit / 7);
-      this.rig.addShake(0.25 + s * 0.9);
-      this.hud.flash(0.25 + s * 0.6);
+      this.rig.addShake(0.45 + s * 1.3);
+      this.rig.fovPunch(-(2 + s * 5));
+      this.hud.flash(0.4 + s * 0.6);
       this.ctx.input.rumble(0.35 + s * 0.65, 120 + s * 200);
       this.vibrate(Math.round(30 + s * 90));
-      if (hit > 4.5) this.hitStop = 0.035 + s * 0.04;
+      if (hit > 3) this.hitStop = 0.04 + s * 0.05;
     }
     // Roces continuos (barrera u otro kart) y fuera de pista: temblor y vibración rítmica
     const scrape = Math.min(1, Math.max(v.wallScrape / 10, v.kartScrape / 6));
     const off = k.surface === 'grass' || k.surface === 'sand' || k.surface === 'gravel' ? Math.min(1, sp / 12) : 0;
-    if (scrape > 0.05) this.rig.addShake(0.05 * scrape);
-    if (off > 0) this.rig.addShake((k.surface === 'grass' ? 0.035 : 0.06) * off);
+    if (scrape > 0.05) this.rig.addShake(0.12 * scrape);
     const buzzK = Math.max(scrape, off * 0.8);
     if (buzzK > 0.05) {
       v.buzz -= dt;
@@ -673,7 +673,6 @@ export class RaceView {
     } else v.buzz = 0;
     // Piano: temblor de cámara y vibración rítmica del mando / móvil
     if (k.kerb > 0 && sp > 5) {
-      this.rig.addShake(0.03 * k.kerb * Math.min(1, sp / 20));
       this.kerbBuzz -= dt;
       if (this.kerbBuzz <= 0) {
         this.kerbBuzz = 0.12;
@@ -1132,7 +1131,7 @@ export class RaceView {
     const fxK = this.ctx.touchEnabled() ? 0.5 : 1;
     // Progresivo desde media velocidad (un kart a 70 km/h a ras de suelo ya "vuela")
     const sp01 = clamp((ratio - 0.55) / 0.45, 0, 1);
-    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? sp01 * sp01 * 0.6 * fxK : 0);
+    this.ctx.post()?.setSpeed(this.ctx.settings.speedLines ? sp01 * sp01 * 0.4 * fxK : 0);
     const sl = fxK * (this.ctx.settings.speedLines ? clamp((ratio - 0.62) / 0.38, 0, 1) : 0);
     hud.drawSpeedLines(Math.min(1, sl), false);
 

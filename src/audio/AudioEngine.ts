@@ -378,20 +378,20 @@ export class AudioEngine {
     L.kerbOsc.frequency.setTargetAtTime(bump, t, 0.02);
     const kl = kerb * Math.min(1, v / 12);
     // Ataque rápido y salida algo más lenta: sin "parpadeos" cuando la rueda roza el borde
-    L.kerbThump.gain.setTargetAtTime(kl * 0.2, t, kl > 0 ? 0.03 : 0.09);
-    L.kerbRattle.gain.setTargetAtTime(kl * 0.12, t, kl > 0 ? 0.03 : 0.09);
+    L.kerbThump.gain.setTargetAtTime(kl * 0.42, t, kl > 0 ? 0.03 : 0.09);
+    L.kerbRattle.gain.setTargetAtTime(kl * 0.26, t, kl > 0 ? 0.03 : 0.09);
     L.kerbRattleF.frequency.setTargetAtTime(700 + v * 18, t, 0.05);
     L.kerbPan.pan.setTargetAtTime((k?.kerbSide ?? 0) * 0.35, t, 0.05);
     const gl = (k?.grass ?? 0) * Math.min(1, v / 10);
     const sl = (k?.sand ?? 0) * Math.min(1, v / 8);
-    L.grass.gain.setTargetAtTime((gl + sl * 0.6) * 0.55, t, 0.06);
-    L.grassSwish.gain.setTargetAtTime(gl * 0.07, t, 0.06);
-    L.sandHiss.gain.setTargetAtTime(sl * 0.09, t, 0.06);
+    L.grass.gain.setTargetAtTime((gl + sl * 0.6) * 0.85, t, 0.06);
+    L.grassSwish.gain.setTargetAtTime(gl * 0.13, t, 0.06);
+    L.sandHiss.gain.setTargetAtTime(sl * 0.16, t, 0.06);
     // Baches del terreno: golpes graves del chasis contra el suelo irregular
     this.bumpLevel = Math.max(gl, sl, this.gravelLevel);
     while (this.bumpLevel > 0.05 && this.bumpNext < t + 0.12) {
       if (this.bumpNext < t) this.bumpNext = t;
-      this.thud(this.bumpNext, 0.25 * this.bumpLevel * (0.5 + Math.random()));
+      this.thud(this.bumpNext, 0.45 * this.bumpLevel * (0.5 + Math.random()));
       this.bumpNext += 0.07 + Math.random() * 0.22 / (0.4 + Math.min(1, v / 15));
     }
     // Roces con la barrera y con otros karts
