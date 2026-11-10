@@ -2288,104 +2288,6 @@ table.results {
   }
 }
 
-/* ---------- Notas de copiloto ---------- */
-.pnote {
-  --pn: #ffc300;
-  position: absolute;
-  top: calc(108px + env(safe-area-inset-top, 0px));
-  left: 50%;
-  transform: translate(-50%, -6px) skewX(-6deg);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px 6px 8px;
-  background: linear-gradient(90deg, rgba(10, 10, 12, 0.88), rgba(10, 10, 12, 0.6));
-  border-left: 5px solid var(--pn);
-  border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.18s, transform 0.18s;
-  pointer-events: none;
-  z-index: 5;
-  white-space: nowrap;
-}
-.pnote.show {
-  opacity: 1;
-  transform: translate(-50%, 0) skewX(-6deg);
-}
-.pn-icon {
-  position: relative;
-  width: 46px;
-  height: 46px;
-  flex-shrink: 0;
-}
-.pn-icon svg {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 0 6px var(--pn));
-}
-.pn-icon b {
-  position: absolute;
-  right: -4px;
-  bottom: -4px;
-  min-width: 20px;
-  height: 20px;
-  line-height: 20px;
-  text-align: center;
-  font-family: var(--font);
-  font-size: 13px;
-  color: #111;
-  background: var(--pn);
-  border-radius: 10px;
-}
-.pn-main {
-  font-family: var(--font);
-  font-style: italic;
-  font-size: 18px;
-  color: #fff;
-  text-shadow: 0 2px 4px #000;
-}
-.pn-sub {
-  font-family: var(--font2);
-  font-size: 12px;
-  font-weight: 700;
-  color: #cfd3da;
-  letter-spacing: 0.04em;
-}
-.pn-brake {
-  font-family: var(--font);
-  font-style: italic;
-  font-size: 15px;
-  color: #fff;
-  background: #d7261e;
-  padding: 3px 9px;
-  border-radius: 3px;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: opacity 0.1s, transform 0.1s;
-}
-.pn-brake.on {
-  opacity: 1;
-  transform: scale(1);
-  animation: pulse 0.45s ease-in-out infinite;
-}
-@media (max-width: 760px), (max-height: 450px) {
-  .pnote {
-    top: calc(84px + env(safe-area-inset-top, 0px));
-    padding: 4px 10px 4px 6px;
-    gap: 7px;
-  }
-  .pn-icon {
-    width: 34px;
-    height: 34px;
-  }
-  .pn-main {
-    font-size: 14px;
-  }
-  .pn-sub {
-    font-size: 10px;
-  }
-}
-
 .loading-bar {
   width: min(320px, 60vw);
   height: 5px;
@@ -2417,4 +2319,70 @@ table.results {
   font-family: var(--font2);
   font-size: 15px;
   color: #d8dbe2;
+}
+
+/* Móvil en horizontal con muy poca altura (ventana incrustada): todo compacto y sin solapes */
+@media (orientation: landscape) and (max-height: 340px) {
+  .touch {
+    --tb: clamp(44px, 21vh, 72px);
+  }
+  /* Los tres botones en una fila: SALTITO ya no sube hasta el velocímetro */
+  .touch .tright {
+    grid-template-areas: 'drift brake accel';
+    grid-template-columns: auto auto auto;
+    grid-template-rows: auto;
+    gap: 6px;
+  }
+  .touch .tzone {
+    bottom: calc(6px + var(--safe-b));
+  }
+  /* Velocímetro arriba, junto al crono */
+  .touch-on .hud-br {
+    top: 4px;
+    right: calc(128px + var(--safe-r));
+  }
+  .touch-on .hud-gauge {
+    width: 54px;
+    height: 54px;
+  }
+  .touch-on .hud-speed {
+    font-size: 17px;
+  }
+  .touch-on .hud-unit,
+  .touch-on .hud-leds,
+  .touch-on .hud-small,
+  .touch-on .hud-session {
+    display: none;
+  }
+  .touch-on .hud-tr {
+    top: 6px;
+  }
+  .touch-on .hud-time {
+    font-size: 18px;
+  }
+  .touch-on .hud-tl {
+    top: 6px;
+  }
+  .touch-on .hud-pos {
+    font-size: 30px;
+  }
+  .touch-on .hud-lap {
+    font-size: 12px;
+    margin-top: 0;
+  }
+  .touch-on .hud-map {
+    top: 62px;
+  }
+  .touch-on .minimap {
+    width: 70px;
+    height: 70px;
+  }
+  .touch-on .radio {
+    top: 46px;
+    font-size: 11px;
+    max-width: 50vw;
+  }
+  .touch-on .hud-msg {
+    font-size: 20px;
+  }
 }

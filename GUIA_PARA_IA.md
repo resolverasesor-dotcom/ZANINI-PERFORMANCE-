@@ -21,7 +21,6 @@ npm run test:tracks    # validez de los trazados (solapes, radios, recta de sali
 npm run test:laps      # tiempos de vuelta por cilindrada (ninguno > 1:20)
 npm run test:assists   # ayudas a la conducción con un "jugador torpe" simulado
 npm run test:chassis   # modelos de kart: tiempos equilibrados y carácter de cada uno
-npm run test:notes     # notas de copiloto (pacenotes) de cada circuito
 ```
 
 Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart), `?speed=3` (acelera el tiempo).
@@ -35,7 +34,6 @@ Parámetros de depuración en la URL: `?autopilot` (la IA conduce tu kart), `?sp
 | `src/core/brakeFilter.ts` | Pie del piloto | Freno progresivo que no bloquea y cede al girar (capa de entrada). |
 | `src/core/steerFilter.ts` | Filtro del mando | Escala la dirección del jugador con la velocidad (tope = límite de agarre, algo más en curva rápida para derrapar) y añade el contravolante del autoalineado del avance. Capa de entrada, no física. |
 | `src/ai/` | IA | `RacingLine.ts` (trazada por banda elástica + perfil de velocidad), `AIDriver.ts` (persecución pura + dirección estacionaria, adelantar/defender, errores, saltitos, anti-atascos), `Drivers.ts` (11 pilotos). |
-| `src/race/pacenotes.ts`, `src/ui/PaceNotes.ts` | Copiloto | Notas de curva generadas de la curvatura (sentido, severidad 1–6, matices, velocidad recomendada) y su widget con aviso de frenada y voz. |
 | `src/race/` | Reglamento | `RaceSim.ts` (sesión sin render: semáforo, salida anticipada, atajos, tiempos, posiciones, resultados), campeonato, fantasma/récords, medallas, desbloqueables, `assists.ts`. |
 | `src/track/` | Circuitos como datos | Un circuito = polígono con radios (`circuits/helpers.ts → rounded()`). `Track.ts` muestrea la spline cada ~1 m. Añadir circuito: nuevo `TrackDef` y registrarlo en `circuits/index.ts`. |
 | `src/engine/` | Render | `TrackScene.ts` (pista, muros/neumáticos, decorado), `kartVenue.ts` (kartódromo: paddock, valla, focos, comisarios), `KartModel.ts`, `trackLife.ts` (carteles de frenada, torres de TV, fotógrafos, dirigible, motas), `CameraRig.ts` (persecución con inercia, inclinación, grúa de salida), `Effects.ts` (partículas y rodadas), `CameraRig.ts`, `PostFX.ts`. |

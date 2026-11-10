@@ -67,8 +67,6 @@ const MODE_INFO: Record<Mode, { title: string; desc: string; icon: string }> = {
 /** Consejos de la pantalla de carga. */
 const TIPS = [
   'Frena en recta y suelta el freno al girar: el kart entra solo.',
-  'El copiloto canta la curva: 1 es muy cerrada, 6 casi a fondo. «U» es una horquilla.',
-  'Si sale «FRENA», ya vas tarde. La próxima vez, un poco antes.',
   'El saltito ayuda a salir de las horquillas lentas. En recta no sirve de nada.',
   'Pégate detrás de otro kart en las rectas: el rebufo regala velocidad.',
   'Un poco de derrape es rápido. Mucho derrape es bonito… y lento.',
@@ -1184,8 +1182,7 @@ export class Game {
     } else if (tab === 'audio') {
       body = `${this.range('Volumen general', 'volume', s.volume)}${this.range('Efectos', 'sfx', s.sfx)}${this.range('Música', 'musicVolume', s.musicVolume)}
         ${this.choice('Música de menú', 'music', [['on', 'Activada'], ['off', 'Desactivada']], s.music ? 'on' : 'off')}
-        ${this.choice('Radio del equipo (comentarios de papá)', 'radio', [['on', 'Sí'], ['off', 'No']], s.radio !== false ? 'on' : 'off')}
-        ${this.choice('Copiloto (notas de curva)', 'pnotes', [['visual', 'En pantalla'], ['voz', 'Pantalla + voz'], ['off', 'No']], s.pacenotes ?? 'visual')}`;
+        ${this.choice('Radio del equipo (comentarios de papá)', 'radio', [['on', 'Sí'], ['off', 'No']], s.radio !== false ? 'on' : 'off')}`;
     } else if (tab === 'controles') {
       const rows = (Object.keys(ACTION_LABELS) as Action[])
         .map((a) => `<div class="keyrow"><span>${ACTION_LABELS[a]}</span><span class="keys">${s.keys[a].map(keyName).join(' / ')}</span><button class="btn sm" data-act="rebind" data-val="${a}">Cambiar</button></div>`)
@@ -1272,11 +1269,6 @@ export class Game {
         },
         touchsteer: (b) => {
           s.touchSteer = b.dataset.val as Settings['touchSteer'];
-          save();
-          re();
-        },
-        pnotes: (b) => {
-          s.pacenotes = b.dataset.val as Settings['pacenotes'];
           save();
           re();
         },
